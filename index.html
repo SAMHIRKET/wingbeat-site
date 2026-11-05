@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f4ecd9">
+<title>WINGBEAT</title>
+<style>
+:root {
+  color-scheme: light;
+  --paper: #f4ecd9;
+  --ink: #25232b;
+  --plum: #70516d;
+  --blue: #8dbacb;
+}
+* { box-sizing: border-box; }
+html { min-width: 240px; background: var(--paper); }
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Trebuchet MS", Verdana, sans-serif;
+}
+#print {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  padding: 28px 16px 22px;
+}
+main {
+  width: min(100%, 1100px);
+  margin: auto;
+  padding: 70px 0 86px;
+  text-align: center;
+}
+h1 {
+  position: relative;
+  margin: 0;
+  height: clamp(84px, 20vw, 238px);
+  color: transparent;
+  user-select: none;
+}
+h1::selection { background: var(--blue); }
+.byline {
+  margin: 24px 0 0;
+  font-size: clamp(13px, 2vw, 17px);
+  line-height: 1.6;
+  letter-spacing: .035em;
+}
+.action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: clamp(44px, 8vh, 78px);
+}
+.play {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: min(292px, 100%);
+  min-height: 76px;
+  padding: 18px 22px;
+  border-radius: 999px;
+  color: var(--ink);
+  text-decoration: none;
+  font-family: Impact, "Arial Black", sans-serif;
+  font-size: 25px;
+  font-weight: 900;
+  letter-spacing: .055em;
+  -webkit-tap-highlight-color: transparent;
+}
+.play span {
+  display: inline-block;
+  transform: rotate(-1deg);
+  text-shadow: .7px .4px 0 var(--ink), -.5px -.3px 0 var(--ink);
+  animation: lettering .5s steps(1, end) infinite;
+}
+.play:focus-visible {
+  outline: 3px dashed var(--ink);
+  outline-offset: 10px;
+}
+.note {
+  margin: 22px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  letter-spacing: .025em;
+}
+footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  width: 100%;
+  font-size: 11px;
+  line-height: 1.7;
+  letter-spacing: .04em;
+}
+.contact {
+  color: inherit;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+.contact:hover { color: #526d9b; }
+.contact:focus-visible {
+  outline: 2px dashed var(--ink);
+  outline-offset: 5px;
+}
+.copyright { margin: 0; }
+@keyframes lettering {
+  0%, 100% { transform: translate(0, 0) rotate(-1deg); }
+  33.333% { transform: translate(.5px, -.5px) rotate(-.65deg); }
+  66.666% { transform: translate(-.5px, .3px) rotate(-1.2deg); }
+}
+@media (max-width: 520px) {
+  .page { padding-top: 20px; }
+  main { padding: 60px 0 70px; }
+  .byline { margin-top: 18px; letter-spacing: 0; }
+  footer {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+</style>
+</head>
+<body>
+<canvas id="print" aria-hidden="true"></canvas>
+<div class="page">
+  <main>
+    <h1>WINGBEAT</h1>
+    <p class="byline">a flight game by CREATION K-HOLE</p>
+    <div class="action">
+      <a class="play" href="https://crekay.itch.io/"><span>PLAY THE DEMO</span></a>
+      <p class="note">demo out this week, pay what you want</p>
+    </div>
+  </main>
+  <footer>
+    <a class="contact" href="mailto:sam@wingbe.at">sam@wingbe.at</a>
+    <p class="copyright">(c) 2026 CREATION K-HOLE</p>
+  </footer>
+</div>
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("print");
+  const ctx = canvas.getContext("2d", { alpha: true });
+  const heading = document.querySelector("h1");
+  const button = document.querySelector(".play");
+  const motion = matchMedia("(prefers-reduced-motion: reduce)");
+  const mask = document.createElement("canvas");
+  const pen = mask.getContext("2d", { willReadFrequently: true });
+
+  const colors = {
+    ink: "#25232b",
+    plum: "#70516d",
+    cyan: "#54aaba",
+    magenta: "#b26799",
+    blue: "#8dbacb",
+    yellow: "#e8ca69",
+    violet: "#a79abc",
+    sky: "#779aac"
+  };
+
+  let width = 0, height = 0, scale = 1;
+  let titleRect, buttonRect, variants = [];
+  let phase = 0, timer = null, queued = false;
+  let hovering = false, focused = false;
+  let skyPath = null;
+
+  // Every printed dot uses a viewport-anchored grid.
+  // Animation changes coverage and radius, never grid positions.
+  function dot(path, x, y, r) {
+    if (r <= .03) return;
+    path.moveTo(x + r, y);
+    path.arc(x, y, r, 0, Math.PI * 2);
+  }
+
+  function paint(path, color, alpha = 1) {
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.fill(path);
+    ctx.globalAlpha = 1;
+  }
+
+  function makeSky() {
+    skyPath = new Path2D();
+    const step = width < 600 ? 11 : 13;
+    for (let y = 5; y < height; y += step) {
+      for (let x = 5; x < width; x += step) {
+        const u = x / width;
+        const v = y / height;
+        const haze = Math.exp(-Math.pow((v - .24) / .35, 2));
+        const sweep = .5 + .5 * Math.sin(u * 3.8 + v * 2.2);
+        dot(skyPath, x, y, .18 + haze * (.34 + sweep * .36));
+      }
+    }
+  }
+
+  function makeTitle() {
+    const w = Math.max(1, Math.ceil(titleRect.width));
+    const h = Math.max(1, Math.ceil(titleRect.height));
+    mask.width = w;
+    mask.height = h;
+    variants = [];
+
+    const text = "WINGBEAT";
+    const rotations = [-.07, .035, -.045, .055, -.025, .045, -.055, .035];
+    const rises = [2, -3, 2, -1, 3, -2, 1, -1];
+
+    for (let frame = 0; frame < 3; frame++) {
+      pen.clearRect(0, 0, w, h);
+      let size = h * .78;
+      pen.font = `900 ${size}px Impact, "Arial Black", sans-serif`;
+      const measured = [...text].map(letter => pen.measureText(letter).width);
+      const rawWidth = measured.reduce((a, b) => a + b, 0);
+      const spacing = size * .012;
+      const fit = Math.min(1, (w - 22) / (rawWidth + spacing * 7 + size * .11));
+
+      pen.save();
+      pen.translate(w / 2, h / 2);
+      pen.scale(fit, 1);
+      pen.font = `900 ${size}px Impact, "Arial Black", sans-serif`;
+      pen.textBaseline = "middle";
+      pen.textAlign = "center";
+      pen.fillStyle = "#000";
+      pen.strokeStyle = "#000";
+      pen.lineJoin = "round";
+
+      let cursor = -(rawWidth + spacing * 7) / 2;
+      [...text].forEach((letter, i) => {
+        const nudge = frame === 0 ? 0 : ((i + frame) % 3 - 1) * .8;
+        pen.save();
+        pen.translate(cursor + measured[i] / 2, rises[i] + nudge);
+        pen.rotate(rotations[i] + (frame - 1) * (i % 2 ? .006 : -.006));
+        pen.fillText(letter, 0, 0);
+        // Slightly disagreeing impressions roughen the letter outlines.
+        pen.lineWidth = 1.1;
+        pen.strokeText(letter, .8 + nudge * .3, -.65);
+        pen.restore();
+        cursor += measured[i] + spacing;
+      });
+      pen.restore();
+
+      variants.push({
+        width: w,
+        height: h,
+        pixels: pen.getImageData(0, 0, w, h).data
+      });
+    }
+  }
+
+  function coverage(variant, x, y) {
+    x = Math.floor(x);
+    y = Math.floor(y);
+    if (x < 0 || y < 0 || x >= variant.width || y >= variant.height) return 0;
+    return variant.pixels[(y * variant.width + x) * 4 + 3] / 255;
+  }
+
+  function titleLayer(variant, dx, dy, radius, color, alpha = 1) {
+    const path = new Path2D();
+    const grid = width < 520 ? 2.5 : 3;
+    const left = titleRect.left, top = titleRect.top;
+    const minX = Math.floor((left - 20) / grid) * grid;
+    const maxX = left + titleRect.width + 22;
+    const minY = Math.floor((top - 18) / grid) * grid;
+    const maxY = top + titleRect.height + 24;
+
+    for (let y = minY; y < maxY; y += grid) {
+      for (let x = minX; x < maxX; x += grid) {
+        const a = coverage(variant, x - left - dx, y - top - dy);
+        if (a > .05) dot(path, x, y, radius * Math.sqrt(a));
+      }
+    }
+    paint(path, color, alpha);
+  }
+
+  function drawTitle() {
+    const variant = variants[phase];
+    if (!variant) return;
+    const small = width < 520;
+    const grid = small ? 2.5 : 3;
+    const offset = small ? 3 : 5;
+
+    titleLayer(variant, offset + 4, 10, grid * .38, colors.plum, .75);
+    titleLayer(variant, -offset, -1, grid * .47, colors.cyan);
+    titleLayer(variant, offset, 2, grid * .47, colors.magenta);
+    titleLayer(variant, 0, 0, grid * .465, colors.ink);
+  }
+
+  function pillDistance(x, y, rect, frame, dx = 0, dy = 0) {
+    const cx = rect.left + rect.width / 2 + dx;
+    const cy = rect.top + rect.height / 2 + dy;
+    const px = x - cx, py = y - cy;
+    const radius = rect.height / 2 - 4;
+    const halfSegment = rect.width / 2 - rect.height / 2;
+    const qx = Math.max(Math.abs(px) - halfSegment, 0);
+    const distance = Math.hypot(qx, py) - radius;
+    const angle = Math.atan2(py, px);
+    const wobble = Math.sin(angle * 7 + frame * 2.1) * .7
+      + Math.sin(angle * 13 - frame * 1.7) * .35;
+    return distance + wobble;
+  }
+
+  function drawButton() {
+    if (!buttonRect) return;
+    const paths = {
+      shadow: new Path2D(),
+      body: new Path2D(),
+      border: new Path2D(),
+      shine: new Path2D(),
+      echo: new Path2D()
+    };
+    const grid = 2.5;
+    const active = hovering || focused;
+    const startX = Math.floor((buttonRect.left - 9) / grid) * grid;
+    const startY = Math.floor((buttonRect.top - 9) / grid) * grid;
+
+    for (let y = startY; y < buttonRect.bottom + 19; y += grid) {
+      for (let x = startX; x < buttonRect.right + 17; x += grid) {
+        const d = pillDistance(x, y, buttonRect, phase);
+        const shadow = pillDistance(x, y, buttonRect, phase, 6, 10);
+        if (shadow < 0) dot(paths.shadow, x, y, .89);
+
+        if (d < 0) {
+          const t = (y - buttonRect.top) / buttonRect.height;
+          const gloss = Math.exp(-Math.pow((t - .25) / .13, 2));
+          const density = .99 - gloss * .49;
+          dot(paths.body, x, y, density);
+
+          if (t > .12 && t < .29 && d < -7) {
+            dot(paths.shine, x, y, .31);
+          }
+        }
+        if (Math.abs(d) < 1.7) {
+          dot(paths.border, x, y, 1.13);
+        }
+        const echo = pillDistance(x, y, buttonRect, (phase + 1) % 3, -1, -1);
+        if (Math.abs(echo - 3.7) < .45 &&
+            Math.sin(x * .16 + y * .2) > -.05) {
+          dot(paths.echo, x, y, .65);
+        }
+      }
+    }
+
+    paint(paths.shadow, colors.plum, .88);
+    paint(paths.body, active ? colors.blue : colors.yellow);
+    paint(paths.shine, "#fffaf0");
+    paint(paths.border, colors.ink);
+    paint(paths.echo, colors.ink, .8);
+  }
+
+  function drawAccents() {
+    if (!titleRect) return;
+    const path = new Path2D();
+    const grid = 5;
+    // Small broken-print bursts, themselves composed entirely of fixed dots.
+    const marks = [
+      [titleRect.left + titleRect.width * .12, titleRect.top - 17, -1],
+      [titleRect.right - titleRect.width * .08, titleRect.bottom + 10, 1]
+    ];
+
+    for (const [cx, cy, direction] of marks) {
+      for (let y = Math.floor((cy - 17) / grid) * grid; y < cy + 18; y += grid) {
+        for (let x = Math.floor((cx - 24) / grid) * grid; x < cx + 25; x += grid) {
+          const px = x - cx, py = y - cy;
+          const ray = Math.abs(py - direction * px * .52);
+          const length = Math.hypot(px, py);
+          const strength = Math.max(0, 1 - ray / 3.2);
+          if (length > 7 && length < 24 && strength > 0) {
+            dot(path, x, y, .85 * strength);
+          }
+        }
+      }
+    }
+    paint(path, colors.violet, .85);
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+    if (skyPath) paint(skyPath, colors.sky, .28);
+    drawAccents();
+    drawTitle();
+    drawButton();
+  }
+
+  function measure() {
+    queued = false;
+    width = document.documentElement.clientWidth;
+    height = window.innerHeight;
+    scale = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    titleRect = heading.getBoundingClientRect();
+    buttonRect = button.getBoundingClientRect();
+    makeSky();
+    makeTitle();
+    draw();
+  }
+
+  function queueMeasure() {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(measure);
+  }
+
+  function run() {
+    clearInterval(timer);
+    timer = null;
+    if (motion.matches || document.hidden) {
+      phase = 0;
+      draw();
+      return;
+    }
+    timer = setInterval(() => {
+      phase = (phase + 1) % 3;
+      draw();
+    }, 1000 / 6);
+  }
+
+  button.addEventListener("pointerenter", () => { hovering = true; draw(); });
+  button.addEventListener("pointerleave", () => { hovering = false; draw(); });
+  button.addEventListener("focus", () => { focused = true; draw(); });
+  button.addEventListener("blur", () => { focused = false; draw(); });
+
+  window.addEventListener("resize", queueMeasure, { passive: true });
+  window.addEventListener("scroll", () => {
+    titleRect = heading.getBoundingClientRect();
+    buttonRect = button.getBoundingClientRect();
+    draw();
+  }, { passive: true });
+  document.addEventListener("visibilitychange", run);
+  motion.addEventListener("change", run);
+
+  measure();
+  run();
+})();
+</script>
+</body>
+</html>
