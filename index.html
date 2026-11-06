@@ -341,9 +341,40 @@ function strip(ctx,l,padX,padY,fill,seed,slant,ragged){
     const gl=new Path2D();for(let yy=Math.floor(y0/5)*5+3;yy<y0+(y1-y0)*.32;yy+=5)for(let xx=Math.floor(x0/5)*5+3;xx<x1;xx+=5)dot(gl,xx,yy,1.25*(1-(yy-y0)/((y1-y0)*.34)));
     paint(ctx,gl,'#6f7dff',.55);}
 }
+// A dark clump of slowly turning glossy objects behind the title, all dots.
+const CLUMP=Array.from({length:16},(_,i)=>({u:hash(i,91),v:hash(i,92),r:.3+hash(i,93)*.3,kind:i%4,
+  col:['#14063f','#2b0a52','#06244f','#3b0a4a'][i%4],hi:['#5a3cff','#c43cff','#24b8ff','#ff3cb4'][i%4],
+  spin:(hash(i,94)-.5)*1.6,tilt:hash(i,95)*Math.PI,z:hash(i,96)}));
+function drawClump(ctx,l){
+  if(!l||!l.ext)return;const o=offsetIn(l.n),e=l.ext;
+  const cx=o.x+e.x+e.w/2,cy=o.y+e.y+e.h/2,RX=e.w/2+40,RY=e.h/2+26,t=motion.matches?0:clock;
+  const objs=CLUMP.map(b=>({...b,x:cx+(b.u-.5)*2*RX*.85,y:cy+(b.v-.5)*2*RY*.45,R:b.r*Math.max(RY*1.5,RX*.36),a:b.tilt+t*b.spin}));
+  const G=4,base=new Map(),add=(c,x,y,r)=>{let p=base.get(c);if(!p){p=new Path2D();base.set(c,p);}dot(p,x,y,r);};
+  const lx=Math.cos(t*.4)*.5-.3,ly=-.55,lz=.7;
+  const shadow=new Path2D();
+  for(let y=Math.floor((cy-RY-40)/G)*G;y<cy+RY+40;y+=G)for(let x=Math.floor((cx-RX-60)/G)*G;x<cx+RX+60;x+=G){
+    let best=null,bz=-9,N;
+    for(const b of objs){
+      const dx=(x-b.x)/b.R,dy=(y-b.y)/b.R,ca=Math.cos(b.a),sa=Math.sin(b.a),u=dx*ca+dy*sa,v=-dx*sa+dy*ca;let n=null;
+      if(b.kind===0){const q=u*u+v*v;if(q<1)n=[u,v,Math.sqrt(1-q)];}
+      else if(b.kind===1){const sq=Math.max(.25,Math.abs(Math.cos(b.a*1.3))),vv=v/sq,rad=Math.hypot(u,vv),q=(rad-.66)/.3;if(Math.abs(q)<1){const z=Math.sqrt(1-q*q);n=[q*u/Math.max(rad,.01),q*vv/Math.max(rad,.01)*sq,z];}}
+      else if(b.kind===2){const aa=Math.max(Math.abs(u)-.55,0),bb=v/.45,q=aa*aa+bb*bb;if(q<1)n=[Math.sign(u)*aa,bb,Math.sqrt(1-q)];}
+      else{const m=Math.max(Math.abs(u),Math.abs(v));if(m<.72){const f=Math.abs(u)>Math.abs(v)?[Math.sign(u)*.7,0,.7]:[0,Math.sign(v)*.7,.7];n=f;}}
+      if(n&&b.z+n[2]*.3>bz){bz=b.z+n[2]*.3;best=b;N=n;}
+    }
+    if(!best){continue;}
+    if(hash(x,y)>.0)dot(shadow,x+7,y+8,1.6);
+    const lit=Math.max(0,N[0]*lx+N[1]*ly+N[2]*lz),spec=Math.pow(Math.max(0,-N[0]*.35-N[1]*.45+N[2]*.82),18);
+    add(best.col,x,y,1.95);
+    if(lit>.7)add(best.hi,x,y,1.1*(lit-.65)*2.5);
+    if(spec>.5)add('#fffaf0',x,y,1.5);
+  }
+  paint(ctx,shadow,C.plum,.5);
+  base.forEach((p,c)=>paint(ctx,p,c,1));
+}
 function drawStrips(ctx){
   const find=t=>letters.find(l=>l.text===t&&main.contains(l.n));
-  strip(ctx,find(COPY.title),26,14,'#16093a',3,0,false);
+  drawClump(ctx,find(COPY.title));
   strip(ctx,find(COPY.byline),14,5,'#050505',11,2,true);
   strip(ctx,find(COPY.note),12,4,'#050505',23,-2,true);
 }
