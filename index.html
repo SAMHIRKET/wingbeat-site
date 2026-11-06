@@ -75,6 +75,7 @@ body.roaming footer{background:#ffffffdc;z-index:10}
 <body>
 <canvas id="aero-world" aria-hidden="true"></canvas><div class="scroll-space" aria-hidden="true"></div>
 <div class="page"><div class="desktop" id="desktop"></div><footer id="footer"></footer></div>
+<noscript><p><a href="https://crekay.itch.io/wingbeat">play da demo</a> - <a href="mailto:sam@wingbe.at">sam@wingbe.at</a></p></noscript>
 <script>
 const COPY = {
   title: "WINGBEAT",
@@ -146,7 +147,7 @@ function windowBox(cls,title,decorative=false,parent=$("#desktop")) {
 const hero=windowBox("hero",COPY.mainBar), main=element("main","",hero.contents);
 const heading=label(main,COPY.title,120,true,C.ink,"h1");
 label(main,COPY.byline,30,false,C.ink,"p").classList.add("byline");
-const action=element("div","action",main), play=element("a","play",action);play.href="https://crekay.itch.io/";
+const action=element("div","action",main), play=element("a","play",action);play.href="https://crekay.itch.io/wingbeat";
 label(play,COPY.play,34,true);label(action,COPY.note,24,false,C.plum,"p").classList.add("note");
 const heroCanvas=element("canvas","hero-print",hero.contents);heroCanvas.setAttribute("aria-hidden","true");
 const teles=[];
