@@ -105,7 +105,8 @@ const COPY = {
     loading: { title: "LOADING.EXE", text: "" },
     orb: { title: "ORB.EXE", text: "" },
     signal: { title: "NO SIGNAL", text: "NO SIGNAL" },
-    folder: { title: "clips", text: "This folder is empty." }
+    folder: { title: "clips", text: "This folder is empty." },
+    portrait: { title: "HEREW.BMP", text: "" }
   }
 };
 // Add repository-local GIF filenames here, for example: ["flight.gif"].
@@ -151,6 +152,8 @@ const heroCanvas=element("canvas","hero-print",hero.contents);heroCanvas.setAttr
 const teles=[];
 const kinds=Object.keys(COPY.fun);
 for(let i=kinds.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[kinds[i],kinds[j]]=[kinds[j],kinds[i]];}
+{const k=kinds.indexOf('portrait');kinds.splice(k,1);kinds.splice(Math.floor(Math.random()*4),0,'portrait');}
+let herewPix=null;image('herew.png').then(im=>{const c=document.createElement('canvas');c.width=im.width;c.height=im.height;const p=c.getContext('2d',{willReadFrequently:true});p.drawImage(im,0,0);herewPix={w:c.width,h:c.height,d:p.getImageData(0,0,c.width,c.height).data};}).catch(()=>{});
 const sideClasses=["tele-one","tele-two","herew","explorer"];
 sideClasses.forEach((cls,i)=>{
   const kind=kinds[i],copy=COPY.fun[kind],w=windowBox(cls,copy.title,true);w.fun=kind;
@@ -280,6 +283,20 @@ function renderWindow(w){
 }
 
 function drawToy(w,ctx){
+  if(w.fun==='portrait'){
+    const top=44,W=w.w,H=w.h,S=Math.min(W-16,H-top-8),ox=(W-S)/2,oy=top+(H-top-8-S)/2;
+    ctx.fillStyle='#0c0814';ctx.fillRect(ox,oy,S,S);
+    if(!herewPix){return;}
+    const G=5,groups=new Map();
+    for(let y=0;y<S;y+=G)for(let x=0;x<S;x+=G){
+      const ix=Math.floor(x/S*herewPix.w),iy=Math.floor(y/S*herewPix.h),i=(iy*herewPix.w+ix)*4,d=herewPix.d;
+      const r=d[i],g=d[i+1],b=d[i+2],lum=(r*.3+g*.59+b*.11)/255;if(lum<.08)continue;
+      const jit=hash(x+fillSeed*13,y)*.5;
+      const col=lum>.82?'#fffaf0':(r>150&&g>120&&b<110)?'#ffe72b':lum>.5?'#9fe8ff':lum>.28?'#2f8cff':'#7a3cff';
+      let p=groups.get(col);if(!p){p=new Path2D();groups.set(col,p);}dot(p,ox+x+G/2,oy+y+G/2,G*.46*Math.min(1,Math.sqrt(lum)+.12+jit*.1));
+    }
+    groups.forEach((p,c)=>paint(ctx,p,c,1));return;
+  }
   if(w.fun==='warning'){
     const x=w.w/2,y=38+(w.h-38)*.46;
     ctx.beginPath();ctx.moveTo(x,y-42);ctx.lineTo(x+46,y+38);ctx.lineTo(x-46,y+38);ctx.closePath();ctx.fillStyle=C.yellow;ctx.fill();ctx.strokeStyle=C.ink;ctx.lineWidth=3;ctx.stroke();
