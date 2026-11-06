@@ -69,7 +69,7 @@ body.roaming .explorer{right:calc(5% - var(--scatter-x));bottom:calc(-4% + var(-
 html,body{background:#e4f7ff}
 #aero-world{background:linear-gradient(180deg,#90d9ff 0%,#d9f5ff 36%,#ffffff 88%)}
 .teletext,.test-caption{background:#1460ff}
-body.roaming footer{background:#ffffffdc}
+body.roaming footer{background:#ffffffdc;z-index:10}
 </style>
 </head>
 <body>
@@ -205,13 +205,14 @@ function drawLetter(l){
   if(!atlases){ctx.font=`bold ${Math.min(l.size,height*.7)}px Verdana`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillStyle=l.color;ctx.fillText(l.text,width/2,height/2,width-4);return;}
   const a=word(l.text,l.big,"ink",inkSeed),b=word(l.text,l.big,"fill",fillSeed),d=word(l.text,l.big,"fill",(fillSeed+1)%3);
   const scale=Math.min(l.size/(l.big?64:32),(width-8)/a.w,(height-4)/a.h),w=a.w*scale,h=a.h*scale,x=(width-w)/2,y=(height-h)/2;
+  l.ext={x,y,w,h};
   if(l.n===heading){
     // Original fixed-grid title impressions, now sampled from the supplied font.
     const grid=width<450?4:5,offset=width<450?3:5;
-    dotWord(ctx,d,x+offset+4,y+8,w,h,C.plum,grid,.75);
+    dotWord(ctx,d,x+offset+4,y+8,w,h,'#000000',grid,.6);
     dotWord(ctx,b,x-offset,y-1,w,h,C.cyan,grid);
     dotWord(ctx,d,x+offset,y+2,w,h,C.magenta,grid);
-    dotWord(ctx,a,x,y,w,h,l.color,grid);
+    dotWord(ctx,a,x,y,w,h,'#fffaf0',grid);
   }else{
     const off=l.big?2:1.1,cell=l.color===C.ice?C.plum:l.color;
     tint(ctx,d,x+off,y+off*.7,w,h,cell,.48);
@@ -318,10 +319,39 @@ function drawToy(w,ctx){
 }
 // The original pill renderer, retained on a canvas local to the main box.
 function pillDistance(x,y,rect,frame,dx=0,dy=0){const cx=rect.left+rect.width/2+dx,cy=rect.top+rect.height/2+dy,px=x-cx,py=y-cy,radius=rect.height/2-4,halfSegment=rect.width/2-rect.height/2,qx=Math.max(Math.abs(px)-halfSegment,0),distance=Math.hypot(qx,py)-radius,angle=Math.atan2(py,px);return distance+Math.sin(angle*7+frame*2.1)*.7+Math.sin(angle*13-frame*1.7)*.35;}
+// 2000s magazine: a dark slab behind the title, marker/whiteout strips behind the lines.
+function offsetIn(node){let x=0,y=0;while(node&&node!==hero.n){x+=node.offsetLeft;y+=node.offsetTop;node=node.offsetParent;}return{x,y};}
+function strip(ctx,l,padX,padY,fill,seed,slant,ragged){
+  if(!l||!l.ext)return;const o=offsetIn(l.n),e=l.ext;
+  const x0=o.x+e.x-padX,x1=o.x+e.x+e.w+padX,y0=o.y+e.y-padY,y1=o.y+e.y+e.h+padY;
+  const J=(i,amp)=>(hash(i+seed,fillSeed+7)-.5)*amp;
+  const pts=[];const n=ragged?9:4;
+  for(let i=0;i<=n;i++){const t=i/n;pts.push([x0+(x1-x0)*t+J(i,3),y0-slant*t+J(i+20,ragged?5:2.5)]);}
+  for(let i=0;i<=3;i++){pts.push([x1+J(i+40,ragged?9:3),y0-slant+(y1-y0)*i/3+J(i+45,2)]);}
+  for(let i=n;i>=0;i--){const t=i/n;pts.push([x0+(x1-x0)*t+J(i+60,3),y1-slant*t+J(i+80,ragged?5:2.5)]);}
+  for(let i=3;i>=0;i--){pts.push([x0+J(i+100,ragged?9:3),y0+(y1-y0)*i/3+J(i+105,2)]);}
+  const path=()=>{ctx.beginPath();pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();};
+  // plum halftone drop shadow
+  const sh=new Path2D();for(let yy=Math.floor((y0+6)/6)*6;yy<y1+9;yy+=6)for(let xx=Math.floor((x0+7)/6)*6;xx<x1+10;xx+=6)dot(sh,xx,yy,2.2);
+  paint(ctx,sh,C.plum,.75);
+  ctx.save();ctx.translate(-3,1);path();ctx.fillStyle=C.magenta;ctx.globalAlpha=.85;ctx.fill();ctx.restore();
+  ctx.save();ctx.translate(3,-1);path();ctx.fillStyle=C.cyan;ctx.globalAlpha=.85;ctx.fill();ctx.restore();
+  ctx.globalAlpha=1;path();ctx.fillStyle=fill;ctx.fill();
+  if(!ragged){ctx.lineWidth=2.6;ctx.strokeStyle='#000';ctx.stroke();
+    const gl=new Path2D();for(let yy=Math.floor(y0/5)*5+3;yy<y0+(y1-y0)*.32;yy+=5)for(let xx=Math.floor(x0/5)*5+3;xx<x1;xx+=5)dot(gl,xx,yy,1.25*(1-(yy-y0)/((y1-y0)*.34)));
+    paint(ctx,gl,'#6f7dff',.55);}
+}
+function drawStrips(ctx){
+  const find=t=>letters.find(l=>l.text===t&&main.contains(l.n));
+  strip(ctx,find(COPY.title),26,14,'#16093a',3,0,false);
+  strip(ctx,find(COPY.byline),14,5,'#050505',11,2,true);
+  strip(ctx,find(COPY.note),12,4,'#050505',23,-2,true);
+}
 function drawButton(){
   const ctx=heroCanvas.getContext('2d');let bx=0,by=0,node=play;
   while(node&&node!==hero.n){bx+=node.offsetLeft;by+=node.offsetTop;node=node.offsetParent;}
   ctx.clearRect(0,0,hero.w,hero.h);if(!hero.n.classList.contains('ready'))return;
+  drawStrips(ctx);
   const W=play.offsetWidth,H=play.offsetHeight,hot=play.matches(':hover,:focus'),r=H/2-4,x=bx+3,y=by+3,w=W-6,h=H-6;
   const shadow=new Path2D(),sheen=new Path2D();
   for(let yy=Math.floor(y/6)*6+3;yy<y+h+12;yy+=6)for(let xx=Math.floor(x/6)*6+3;xx<x+w+12;xx+=6){
@@ -351,8 +381,8 @@ function pauseMedia(){}
 function applyColors(){
   letters.forEach(l=>{
     if(l.n.closest('.bar'))return;
-    if(l.text===COPY.byline)l.color="#1259e9";
-    else if(l.text===COPY.note)l.color="#af16be";
+    if(l.text===COPY.byline)l.color="#3ff2ff";
+    else if(l.text===COPY.note)l.color="#c6ff3a";
     else if(l.text===COPY.play)l.color=C.ice;
     else if(l.n.closest('.toy')){}
     else if(l.n.closest('footer'))l.color=l.text===COPY.email?"#1462dd":"#b51db0";
