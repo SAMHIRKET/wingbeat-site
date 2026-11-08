@@ -1,0 +1,50 @@
+name: wingbeat-pokedraw
+services:
+  pokedraw:
+    build: .
+    init: true
+    restart: unless-stopped
+    read_only: true
+    environment:
+      DATA_DIR: /data
+      TRUST_PROXY: "1"
+      PUBLIC_ORIGIN: "https://${POKEDRAW_DOMAIN:-draw.wingbe.at}"
+    volumes:
+      - rooms:/data
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      POKEDRAW_DOMAIN: "${POKEDRAW_DOMAIN:-draw.wingbe.at}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      pokedraw:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+volumes:
+  rooms:
+  caddy_data:
+  caddy_config:

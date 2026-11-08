@@ -1,0 +1,4 @@
+{$POKEDRAW_DOMAIN:draw.wingbe.at} {
+    encode zstd gzip
+    reverse_proxy pokedraw:3000
+}

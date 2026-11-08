@@ -1,0 +1,7 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {HintCatalog} from '../hints.mjs';
+import {chooseHint} from '../public/hints.js';
+test('each hint press samples again and avoids the immediately previous card',()=>{const cards=[{id:'a'},{id:'b'},{id:'c'}];let last;for(let i=0;i<10;i++){const next=chooseHint(cards,last,()=>0);assert.notEqual(next.id,last);last=next.id;}assert.equal(chooseHint([{id:'only'}],'only').id,'only');assert.equal(chooseHint([],null),null);});
+test('catalog fetch validates exact Pokémon and trusted image host and caches metadata',async()=>{let calls=0;const catalog=new HintCatalog(async url=>{calls++;assert.equal(url.searchParams.get('name'),'eq:Pikachu');return {ok:true,json:async()=>[{id:'base1-58',name:'Pikachu',image:'https://assets.tcgdex.net/en/base/base1/58'},{id:'bad',name:'Pikachu',image:'https://bad.example/spy'},{id:'wrong',name:'Raichu',image:'https://assets.tcgdex.net/en/base/base1/14'}]};});const cards=await catalog.list('Pikachu');assert.equal(cards.length,1);assert.equal(cards[0].image,'https://assets.tcgdex.net/en/base/base1/58/high.webp');await catalog.list('Pikachu');assert.equal(calls,1);});
+test('reference failures do not affect gameplay and return a useful error',async()=>{const catalog=new HintCatalog(async()=>{throw new Error('offline');});await assert.rejects(catalog.list('Pikachu'),/drawing round can continue/);});

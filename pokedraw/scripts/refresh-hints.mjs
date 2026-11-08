@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+import {pokemon} from '../pokemon.mjs';
+const names=new Set(pokemon),url='https://api.tcgdex.net/v2/en/cards';
+const response=await fetch(url,{signal:AbortSignal.timeout(30000)});
+if(!response.ok)throw new Error(`Catalogue request failed (${response.status}); existing catalogue unchanged.`);
+const data=await response.json(),cards={};
+for(const c of data)if(names.has(c.name)&&/^https:\/\/assets\.tcgdex\.net\/[a-zA-Z0-9/_-]+$/.test(c.image||''))(cards[c.name]??=[]).push({id:c.id,name:c.name,image:c.image+'/high.webp',source:'TCGdex'});
+const missing=pokemon.filter(n=>!cards[n]);if(missing.length)throw new Error('Incomplete catalogue; existing catalogue unchanged. Missing: '+missing.join(', '));
+fs.writeFileSync(new URL('../hints-cache.json',import.meta.url),JSON.stringify({retrieved:new Date().toISOString().slice(0,10),source:'https://tcgdex.dev/rest/cards',cards}));
+console.log(`Updated ${Object.values(cards).reduce((n,c)=>n+c.length,0)} cards for ${Object.keys(cards).length} Pokémon.`);

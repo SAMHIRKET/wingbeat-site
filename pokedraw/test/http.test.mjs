@@ -1,0 +1,25 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createApp} from '../server.mjs';
+const draw={revision:5,ops:[{tool:'pen',color:'#29235c',size:7,alpha:1,points:[[30,40,1],[90,110,.7]]}]};
+async function fixture(options={}){
+  const dataDir=mkdtempSync(join(tmpdir(),'pokedraw-http-'));let app=createApp({dataDir,...options}),base;
+  async function listen(){await new Promise(resolve=>app.server.listen(0,'127.0.0.1',resolve));base=`http://127.0.0.1:${app.server.address().port}`;}
+  await listen();
+  return {
+    get origin(){return base;},
+    async call(path='',data,token,headers={}){const response=await fetch(base+path,{method:data===undefined?'GET':'POST',headers:{...(data===undefined?{}:{'Content-Type':'application/json'}),...(token?{Authorization:`Bearer ${token}`} : {}),...headers},body:data===undefined?undefined:JSON.stringify(data)});const text=await response.text();let body;try{body=JSON.parse(text);}catch{body=text;}return {status:response.status,body,headers:response.headers};},
+    async restart(){await app.close();app=createApp({dataDir,...options});await listen();},
+    async close(){await app.close();rmSync(dataDir,{recursive:true,force:true});},
+  };
+}
+test('HTTP health and all client modules are served with content security headers',async()=>{const f=await fixture();try{assert.deepEqual((await f.call('/healthz')).body,{ok:true});for(const path of ['/','/pokedraw/','/pokedraw/app.js','/pokedraw/style.css','/pokedraw/drawing.js','/pokedraw/hints.js','/pokedraw/kit.js','/pokedraw/card.js','/pokedraw/copy.js','/pokedraw/preview.js','/pokedraw/fonts/scratch_glyphs.txt','/pokedraw/fonts/scratch_big_ink_1.png']){const r=await f.call(path);assert.equal(r.status,200);assert.equal(r.headers.get('x-content-type-options'),'nosniff');assert.ok(r.headers.get('content-security-policy'));}assert.equal((await f.call('/data/pokedraw.sqlite')).status,404);}finally{await f.close();}});
+test('HTTP rejects cross-origin writes and invalid JSON shapes',async()=>{const f=await fixture();try{assert.equal((await f.call('/api/rooms',{},null,{Origin:'https://other.example'})).status,403);assert.equal((await f.call('/api/rooms',{},null,{Origin:'null'})).status,403);assert.equal((await f.call('/api/rooms',null)).status,400);assert.equal((await f.call('/api/rooms',[])).status,400);assert.equal((await f.call('/api/rooms',{},null,{Origin:f.origin})).status,201);}finally{await f.close();}});
+test('public origin works behind a private reverse proxy and rejects other origins',async()=>{const f=await fixture({publicOrigin:'https://draw.wingbe.at',trustProxy:true});try{assert.equal((await f.call('/api/rooms',{},null,{Origin:'https://draw.wingbe.at'})).status,201);assert.equal((await f.call('/api/rooms',{},null,{Origin:'https://other.example'})).status,403);assert.equal((await f.call('/api/rooms',{},null,{Origin:f.origin})).status,403);}finally{await f.close();}});
+test('untrusted clients cannot spoof forwarded headers to bypass room rate limits',async()=>{const f=await fixture();try{for(let i=0;i<8;i++)assert.equal((await f.call('/api/rooms',{},null,{'X-Forwarded-For':`192.0.2.${i+1}`})).status,201);assert.equal((await f.call('/api/rooms',{},null,{'X-Forwarded-For':'192.0.2.100'})).status,429);}finally{await f.close();}});
+test('trusted proxy uses its appended peer address and keeps visitors separate',async()=>{const f=await fixture({trustProxy:true});try{for(let i=0;i<10;i++)assert.equal((await f.call('/api/rooms',{},null,{'X-Forwarded-For':`198.51.100.1, 192.0.2.${i+1}`})).status,201);for(let i=0;i<7;i++)assert.equal((await f.call('/api/rooms',{},null,{'X-Forwarded-For':`${i%2?'203.0.113.2':'203.0.113.1'}, 192.0.2.1`})).status,201);assert.equal((await f.call('/api/rooms',{},null,{'X-Forwarded-For':'203.0.113.99, 192.0.2.1'})).status,429);}finally{await f.close();}});
+test('HTTP restart keeps saved drawings and server deletion removes the room',async()=>{const f=await fixture();try{const h=(await f.call('/api/rooms',{name:'Restart check',seconds:90})).body;const path='/api/rooms/'+h.code;assert.equal((await f.call(path+'/ready',{},h.token)).status,200);assert.equal((await f.call(path+'/start',{},h.token)).status,200);assert.equal((await f.call(path+'/save',{round:1,drawing:draw},h.token)).status,200);await f.restart();assert.equal((await f.call(path+'/draft/1',undefined,h.token)).body.revision,5);assert.equal((await f.call(path,undefined,'wrong')).status,403);assert.equal((await f.call(path+'/delete',{},h.token)).status,200);assert.equal((await f.call(path,undefined,h.token)).status,404);}finally{await f.close();}});
+test('oversized request is rejected before it creates a room',async()=>{const f=await fixture();try{assert.equal((await f.call('/api/rooms',{huge:'x'.repeat(1600000)})).status,413);}finally{await f.close();}});

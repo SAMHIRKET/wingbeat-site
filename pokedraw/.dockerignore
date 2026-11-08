@@ -1,0 +1,12 @@
+data/
+*.sqlite*
+node_modules/
+.git/
+.env
+backups/
+test/
+scripts/
+*.zip
+*.mp3
+*.wav
+*.md
