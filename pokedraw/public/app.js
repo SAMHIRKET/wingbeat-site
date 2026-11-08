@@ -17,6 +17,10 @@ const artStore=document.createElement('div');artStore.hidden=true;document.body.
 const artCanvas=new Map(),live=new Set();let cardEpoch=0;
 function clearCardMemory(){cardEpoch++;replayAbort?.abort();live.clear();for(const c of artCanvas.values()){c.width=0;c.height=0;c.remove();}artCanvas.clear();cardCache.clear();activeCard=null;$('#card-dialog')?.close();if($('#card-detail'))$('#card-detail').replaceChildren();}
 
+// Inside the wingbe.at/draw frame, invites point at the site page, which passes ?room= on to the game.
+const SITE_PAGE='https://wingbe.at/draw';
+function inviteBase(){try{if(window.top!==window&&/(^|\.)wingbe\.at$/.test(new URL(document.referrer||'x:').hostname))return SITE_PAGE;}catch{}return location.href;}
+
 /* ---------- markup helpers ---------- */
 // Scratch lettering. size in px; color is a kit token (ink, plum, ice, magenta, cyan, lime, sky) or hex.
 const L=(t,size=22,color='ink',more='',cls='')=>`<span class="wb-l ${cls}" data-size="${size}" data-color="${color}" ${more}>${esc(t)}</span>`;
@@ -236,7 +240,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button');i
     const action=b.dataset.action;if(!action)return;
     if(action==='help')showTutorial();
     else if(action==='refresh-public')await loadPublic();
-    else if(action==='invite'){const url=new URL(location.href);url.searchParams.set('room',seat.code);try{await navigator.clipboard.writeText(url.href);notice(url.href);}catch{prompt('Invite link',url.href);}}
+    else if(action==='invite'){const url=new URL(inviteBase());url.searchParams.set('room',seat.code);try{await navigator.clipboard.writeText(url.href);notice(url.href);}catch{prompt('Invite link',url.href);}}
     else if(['ready','start','gallery'].includes(action)){b.disabled=true;await act(action);}
     else if(action==='undo')sketch?.undo();else if(action==='redo')sketch?.redo();
     else if(action==='zoom-in')sketch?.setZoom(sketch.zoom+.5);else if(action==='zoom-out')sketch?.setZoom(sketch.zoom-.5);else if(action==='zoom-reset')sketch?.setZoom(1);

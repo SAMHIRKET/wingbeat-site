@@ -23,8 +23,8 @@ export function createApp({dataDir=process.env.DATA_DIR||path.join(root,'data'),
   function allowed(req,kind,limit){const key=`${clientIp(req)}:${kind}`,time=now();let b=rate.get(key);if(!b||time>b.until){b={count:0,until:time+60000};rate.set(key,b);}if(++b.count>limit)throw error('Please slow down and try again in a minute.',429);}
   async function body(req){let n=0;const chunks=[];for await(const c of req){n+=c.length;if(n>1_600_000)throw error('Drawing is too large.',413);chunks.push(c);}try{const data=JSON.parse(Buffer.concat(chunks).toString()||'{}');if(!data||typeof data!=='object'||Array.isArray(data))throw new Error();return data;}catch{throw error('Invalid request.',400);}}
   const server=http.createServer(async(req,res)=>{
-    res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');res.setHeader('X-Frame-Options','SAMEORIGIN');
-    res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https://assets.tcgdex.net; connect-src 'self'; base-uri 'none'; frame-ancestors 'self'");
+    res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');
+    res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https://assets.tcgdex.net; connect-src 'self'; base-uri 'none'; frame-ancestors 'self' https://wingbe.at https://www.wingbe.at");
     const send=(value,status=200)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));};
     try{
       const url=new URL(req.url,'http://localhost');
