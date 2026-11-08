@@ -14,6 +14,7 @@ a{color:inherit}
 .sr,.skip:not(:focus){position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
 .skip:focus{position:fixed;z-index:50;left:12px;top:12px;background:var(--paper);padding:8px 12px}
 .hidden{display:none!important}
+.wb-idle .wb-btn,.wb-idle .timer.urgent{animation-play-state:paused}
 
 /* ---- kit: aero box ---- */
 .wb-win{position:relative;isolation:isolate;visibility:hidden;margin:14px 0}
@@ -124,7 +125,9 @@ label.check{display:flex;align-items:center;gap:9px;color:var(--ink)}
 @keyframes shake{50%{transform:translate(2px,-1px) rotate(-2deg)}}
 .hint-button{min-width:150px;height:56px;touch-action:none;user-select:none;-webkit-user-select:none}
 .board-viewport{position:relative;aspect-ratio:4/3;overflow:hidden;background:#fff;border:3px solid var(--ink);box-shadow:-4px 2px 0 var(--magenta),4px -2px 0 var(--cyan),8px 9px 0 #7222a455;touch-action:none}
-#board{display:block;width:100%;height:100%;transform-origin:0 0;touch-action:none;cursor:crosshair}
+.board-viewport{isolation:isolate;background:#faf6e9}
+#paper{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#board{position:relative;display:block;width:100%;height:100%;transform-origin:0 0;touch-action:none;cursor:crosshair;mix-blend-mode:multiply}
 .drawing-status{display:flex;justify-content:space-between;gap:10px;margin-top:10px;font-size:.78rem;color:var(--plum);min-height:1.2em}
 .board-overlay{position:absolute;inset:0;display:grid;place-items:center;background:radial-gradient(circle,#7222a466 1.4px,transparent 1.8px) 0 0/6px 6px}
 .overlay-box{width:min(260px,70%);padding:12px;background:var(--paper);border:3px solid var(--ink);box-shadow:-3px 1px 0 var(--magenta),3px -1px 0 var(--cyan)}

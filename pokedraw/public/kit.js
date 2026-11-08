@@ -1,3 +1,5 @@
+import {FONT_METRICS} from './font-metrics.js';
+import {canvasBudget,animationActive} from './render-budget.js';
 // WINGBEAT web kit: the wingbe.at look, lifted from the landing page so Pokedraw
 // shares one set of parts. Everything here is drawing only; it never talks to the
 // room service.
@@ -17,9 +19,12 @@
 export const C = {ink:'#1833a0',plum:'#7222a4',cyan:'#00d4e8',magenta:'#ff27ba',blue:'#1263ff',yellow:'#ffe72b',ice:'#fffaf0',paper:'#fffcf0',lime:'#c6ff3a',sky:'#3ff2ff'};
 const TITLE_COLORS = ['#004cff','#00b96a','#ff21b5','#e8341c'];
 const motion = matchMedia('(prefers-reduced-motion: reduce)');
-let clock = 0, last = performance.now(), fillSeed = 0, inkSeed = 0, atlases = null, glyphs = null;
+let clock = 0, last = performance.now(), lastInput=last, focused=true, fillSeed = 0, inkSeed = 0, atlases = null;
 const wins = new Set(), letters = new Set(), pills = new Set(), faces = new Set(), seen = new Set();
-const cache = new Map();
+const cache = new Map();let cacheBytes=0;
+function releaseCanvas(c){c.width=0;c.height=0;}
+function trimFontCache(){while(cacheBytes>12*1024*1024||cache.size>240){const [key,r]=cache.entries().next().value;cache.delete(key);cacheBytes-=r.bytes;releaseCanvas(r.c);r.tints?.forEach(releaseCanvas);}}
+function wake(){lastInput=performance.now();document.documentElement.classList.remove('wb-idle');}
 const ro = new ResizeObserver(entries=>{for(const e of entries){const el=e.target;if(!el._wb)continue;if(letters.has(el)){sizeLetter(el);drawLetter(el);}else if(wins.has(el))drawWin(el);else if(pills.has(el))drawPill(el);}});
 
 export const reduced = () => motion.matches;
@@ -30,21 +35,19 @@ export function dot(path,x,y,r){if(r<=.03)return;path.moveTo(x+r,y);path.arc(x,y
 export function paint(ctx,path,color,alpha=1){ctx.globalAlpha=alpha;ctx.fillStyle=color;ctx.fill(path);ctx.globalAlpha=1;}
 export function hash(x,y){const s=Math.sin(x*127.1+y*311.7)*43758.5453;return s-Math.floor(s);}
 const mod=(n,m)=>((n%m)+m)%m;
-function fit(canvas,w,h){const d=Math.min(devicePixelRatio||1,2);const W=Math.max(1,Math.ceil(w*d)),H=Math.max(1,Math.ceil(h*d));if(canvas.width!==W||canvas.height!==H){canvas.width=W;canvas.height=H;}const ctx=canvas.getContext('2d');ctx.setTransform(d,0,0,d,0,0);return ctx;}
+function fit(canvas,w,h){const {scale:d,width:W,height:H}=canvasBudget(w,h,devicePixelRatio||1);if(canvas.width!==W||canvas.height!==H){canvas.width=W;canvas.height=H;}const ctx=canvas.getContext('2d');ctx.setTransform(d,0,0,d,0,0);return ctx;}
 function image(src){return new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=src;});}
 const colorOf=v=>!v?C.ink:(C[v]||v);
 function inView(el,pad=40){const r=el.getBoundingClientRect();return r.width>0&&r.bottom>-pad&&r.top<innerHeight+pad;}
 
 /* ---------- scratch font ---------- */
 async function loadFonts(){
-  glyphs=Array.from((await fetch('fonts/scratch_glyphs.txt').then(r=>{if(!r.ok)throw Error();return r.text();})).replace(/[\r\n]+$/,''));
+  const glyphs=Array.from(FONT_METRICS.glyphs);
   const out={big:{ink:[],fill:[]},small:{ink:[],fill:[]}};
   await Promise.all(['big','small'].flatMap(size=>['ink','fill'].flatMap(kind=>[1,2,3].map(async seed=>{
-    const im=await image(`fonts/scratch_${size}_${kind}_${seed}.png`),c=document.createElement('canvas');c.width=im.width;c.height=im.height;
-    const p=c.getContext('2d',{willReadFrequently:true});p.drawImage(im,0,0);const data=p.getImageData(0,0,c.width,c.height).data;
-    const sep=x=>data[x*4]===data[0]&&data[x*4+1]===data[1]&&data[x*4+2]===data[2]&&data[x*4+3]===data[3];
-    const cells=new Map();let x=0,k=0;
-    while(x<c.width){while(x<c.width&&sep(x))x++;const s=x;while(x<c.width&&!sep(x))x++;if(x>s&&k<glyphs.length)cells.set(glyphs[k++],{x:s,w:x-s});}
+    const key=`scratch_${size}_${kind}_${seed}`,metrics=FONT_METRICS.atlases[key],im=await image(`fonts/${key}.png`);
+    if(im.width!==metrics.width||im.height!==metrics.height)throw Error('Font atlas dimensions changed.');
+    const cells=new Map(metrics.cells.map(([x,w],i)=>[glyphs[i],{x,w}]));
     out[size][kind][seed-1]={im,cells,h:im.height};
   }))));
   return out;
@@ -52,7 +55,7 @@ async function loadFonts(){
 // Accents (Pokémon) are drawn as a small stroke from the apostrophe glyph.
 const MARKS={'́':1,'̀':-1,'̈':2};
 function word(text,big,kind,seed){
-  const key=[text,big,kind,seed].join('|');if(cache.has(key))return cache.get(key);
+  const key=[text,big,kind,seed].join('|');if(cache.has(key)){const r=cache.get(key);cache.delete(key);cache.set(key,r);return r;}
   const a=atlases[big?'big':'small'][kind][seed],line=big?64:32,chars=Array.from(text.normalize('NFD'));
   const pad=chars.some(ch=>MARKS[ch])?Math.round(a.h*.2):0,H=a.h+pad;
   const width=chars.reduce((w,ch)=>MARKS[ch]?w:w+(a.cells.get(ch)?.w||(ch===' '?line*.32:line*.5)),0);
@@ -63,12 +66,12 @@ function word(text,big,kind,seed){
     if(g){p.drawImage(a.im,g.x,0,g.w,a.h,x,pad,g.w,a.h);prev={x,w:g.w};x+=g.w;}
     else{const w=ch===' '?line*.32:line*.5;if(ch!==' '){p.font=`bold ${line*.6}px Verdana,sans-serif`;p.fillStyle='#fff';p.textAlign='center';p.fillText(ch,x+w/2,pad+line*.74);}prev={x,w};x+=w;}
   }
-  const r={c,w:c.width,h:c.height,pad,data:p.getImageData(0,0,c.width,c.height).data};cache.set(key,r);
-  if(cache.size>900){for(const k of cache.keys()){cache.delete(k);if(cache.size<700)break;}}
+  const rgba=p.getImageData(0,0,c.width,c.height).data,data=new Uint8Array(c.width*c.height);for(let i=0;i<data.length;i++)data[i]=rgba[i*4+3];
+  const r={c,w:c.width,h:c.height,pad,data,bytes:c.width*c.height*5};cache.set(key,r);cacheBytes+=r.bytes;
   return r;
 }
-function sample(a,x,y){x=Math.floor(x);y=Math.floor(y);return x<0||y<0||x>=a.w||y>=a.h?0:a.data[(y*a.w+x)*4+3]/255;}
-function tint(ctx,a,x,y,w,h,color,alpha=1){if(!a.tints)a.tints=new Map();let c=a.tints.get(color);if(!c){c=document.createElement('canvas');c.width=a.w;c.height=a.h;const p=c.getContext('2d');p.drawImage(a.c,0,0);p.globalCompositeOperation='source-in';p.fillStyle=color;p.fillRect(0,0,c.width,c.height);a.tints.set(color,c);}ctx.globalAlpha=alpha;ctx.drawImage(c,x,y,w,h);ctx.globalAlpha=1;}
+function sample(a,x,y){x=Math.floor(x);y=Math.floor(y);return x<0||y<0||x>=a.w||y>=a.h?0:a.data[y*a.w+x]/255;}
+function tint(ctx,a,x,y,w,h,color,alpha=1){if(!a.tints)a.tints=new Map();let c=a.tints.get(color);if(!c){c=document.createElement('canvas');c.width=a.w;c.height=a.h;const p=c.getContext('2d');p.drawImage(a.c,0,0);p.globalCompositeOperation='source-in';p.fillStyle=color;p.fillRect(0,0,c.width,c.height);a.tints.set(color,c);const bytes=a.w*a.h*4;a.bytes+=bytes;cacheBytes+=bytes;}ctx.globalAlpha=alpha;ctx.drawImage(c,x,y,w,h);ctx.globalAlpha=1;}
 function dotWord(ctx,a,x,y,w,h,color,grid=2,alpha=1){const p=new Path2D();for(let yy=Math.floor(y/grid)*grid;yy<y+h;yy+=grid)for(let xx=Math.floor(x/grid)*grid;xx<x+w;xx+=grid){const v=sample(a,(xx-x)*a.w/w,(yy-y)*a.h/h);if(v>.03)dot(p,xx,yy,grid*.46*Math.sqrt(v));}paint(ctx,p,color,alpha);}
 
 // Draw text in the scratch font into a box. Returns the inked extent.
@@ -124,7 +127,7 @@ function drawLetter(el){
 /* ---------- aero window ---------- */
 function setupWin(el){
   if(el._wb)return;
-  const key=el.dataset.key,already=key&&seen.has(key);if(key)seen.add(key);
+  const key=el.dataset.key,already=key&&seen.has(key);if(key){seen.add(key);if(seen.size>256)seen.delete(seen.values().next().value);}
   const cv=document.createElement('canvas');cv.className='wb-chrome';cv.setAttribute('aria-hidden','true');el.prepend(cv);
   const seed=Math.random();
   el._wb={canvas:cv,start:already||motion.matches?-10:clock+(+el.dataset.delay||0),w:0,h:0,
@@ -143,7 +146,14 @@ function drawWin(el){
   el.classList.add('open');const settled=age>=.5;if(settled)el.classList.add('ready');
   const calm=el.dataset.field==='calm',BAR=el.querySelector(':scope>.wb-bar')?38:0;
   const fr=Math.min(5,Math.floor(age*12)),pop=[[.08,.12],[.4,1.3],[1.12,.84],[.94,1.08],[1.02,.98],[1,1]][fr];
-  const sh=new Path2D();for(let y=9;y<H+12;y+=6)for(let x=9;x<W+12;x+=6)dot(sh,x,y,2.25);paint(ctx,sh,C.plum,.8);
+  // The opaque panel hides its interior shadow once open. Retain just the edge dots.
+  const shadowKey=`${W}:${H}:${settled}`;
+  if(s.shadowKey!==shadowKey){const sh=new Path2D();
+    const right=9+6*Math.ceil((W-2.25-9)/6),bottom=9+6*Math.ceil((H-2.25-9)/6);
+    for(let y=9;y<H+12;y+=6)for(let x=settled&&y<bottom?Math.max(9,right):9;x<W+12;x+=6)dot(sh,x,y,2.25);
+    s.shadow=sh;s.shadowKey=shadowKey;
+  }
+  paint(ctx,s.shadow,C.plum,.8);
   ctx.save();ctx.translate(W/2,H/2);ctx.scale(pop[0],pop[1]);ctx.translate(-W/2,-H/2);
   ctx.fillStyle=C.paper;ctx.fillRect(0,0,W,H);
   if(BAR){ctx.fillStyle=s.color;ctx.fillRect(0,0,W,BAR);
@@ -239,39 +249,46 @@ function drawWorld(force){
 
 /* ---------- registry + clock ---------- */
 export function face(canvas,draw){const f={canvas,draw,dirty:true};canvas._wbFace=f;faces.add(f);return f;}
-export function dirty(canvas){if(canvas?._wbFace)canvas._wbFace.dirty=true;}
+export function dirty(canvas){if(canvas?._wbFace){canvas._wbFace.dirty=true;wake();}}
 function scan(root=document){
   root.querySelectorAll?.('.wb-win').forEach(setupWin);
   root.querySelectorAll?.('.wb-l').forEach(setupLetter);
   root.querySelectorAll?.('.wb-pill').forEach(setupPill);
 }
-function prune(){for(const set of [wins,letters,pills])for(const el of set)if(!el.isConnected){set.delete(el);ro.unobserve(el);}for(const f of faces)if(!f.canvas.isConnected)faces.delete(f);}
+function prune(){for(const set of [wins,letters,pills])for(const el of set)if(!el.isConnected){set.delete(el);ro.unobserve(el);releaseCanvas(el._wb.canvas);}for(const f of faces)if(!f.canvas.isConnected){faces.delete(f);releaseCanvas(f.canvas);}}
 export function redraw(all=false){
   prune();
   wins.forEach(el=>{if(all||inView(el))drawWin(el);});
   pills.forEach(el=>{if(all||inView(el))drawPill(el);});
   letters.forEach(el=>{if(all||inView(el))drawLetter(el);});
   faces.forEach(f=>{if((f.dirty||all||f.live?.())&&inView(f.canvas)){f.dirty=false;f.draw(f.canvas);}});
-  drawWorld(all);
+  drawWorld(all);trimFontCache();
 }
 function tick(){
-  if(document.hidden)return;const now=performance.now();if(!motion.matches)clock+=Math.min((now-last)/1000,.25);last=now;
+  const now=performance.now(),active=animationActive(now,lastInput,{hidden:document.hidden,focused,reduced:motion.matches});
+  const dt=Math.min((now-last)/1000,.25);last=now;prune();trimFontCache();
+  document.documentElement.classList.toggle('wb-idle',!active);
+  if(!active){if(!document.hidden)faces.forEach(f=>{if(f.dirty&&inView(f.canvas)){f.dirty=false;f.draw(f.canvas);}});return;}
+  clock+=dt;
   fillSeed=motion.matches?0:Math.floor(clock*6)%3;inkSeed=motion.matches?0:Math.floor(clock*3)%3;
   prune();
   wins.forEach(el=>{if(inView(el)){const age=clock-el._wb.start;if(!motion.matches||age<1)drawWin(el);}});
   if(!motion.matches){pills.forEach(el=>inView(el)&&drawPill(el));letters.forEach(el=>inView(el)&&drawLetter(el));}
   faces.forEach(f=>{if((f.dirty||(!motion.matches&&f.live?.()))&&inView(f.canvas)){f.dirty=false;f.draw(f.canvas);}});
-  drawWorld();
+  drawWorld();trimFontCache();
 }
 export async function boot(){
   world=document.getElementById('wb-world');
   scan();
-  new MutationObserver(muts=>{for(const m of muts)for(const n of m.addedNodes)if(n.nodeType===1){if(n.matches?.('.wb-win'))setupWin(n);if(n.matches?.('.wb-l'))setupLetter(n);if(n.matches?.('.wb-pill'))setupPill(n);scan(n);}}).observe(document.body,{childList:true,subtree:true});
-  addEventListener('resize',()=>redraw(true),{passive:true});
-  addEventListener('scroll',()=>redraw(),{passive:true});
-  try{atlases=await loadFonts();cache.clear();letters.forEach(sizeLetter);}catch{/* real text stays readable without the atlases */}
+  new MutationObserver(muts=>{for(const m of muts)for(const n of m.addedNodes)if(n.nodeType===1){wake();if(n.matches?.('.wb-win'))setupWin(n);if(n.matches?.('.wb-l'))setupLetter(n);if(n.matches?.('.wb-pill'))setupPill(n);scan(n);}}).observe(document.body,{childList:true,subtree:true});
+  addEventListener('resize',()=>{wake();redraw(true);},{passive:true});
+  addEventListener('scroll',()=>{wake();redraw();},{passive:true});
+  try{atlases=await loadFonts();letters.forEach(sizeLetter);}catch{/* real text stays readable without the atlases */}
   redraw(true);
   setInterval(tick,1000/6);
-  motion.addEventListener('change',()=>redraw(true));
-  document.addEventListener('visibilitychange',()=>{last=performance.now();if(!document.hidden)redraw(true);});
+  for(const event of ['pointermove','pointerdown','keydown'])addEventListener(event,wake,{passive:true});
+  addEventListener('blur',()=>{focused=false;});
+  addEventListener('focus',()=>{focused=true;wake();redraw(true);});
+  motion.addEventListener('change',()=>{wake();redraw(true);});
+  document.addEventListener('visibilitychange',()=>{last=performance.now();if(!document.hidden){wake();redraw(true);}});
 }

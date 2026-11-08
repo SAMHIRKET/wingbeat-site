@@ -6,13 +6,16 @@ import {HoldHint} from './hints.js';
 import * as WB from './kit.js';
 import {paintCard,exportCard,CARD_W,CARD_H,MARGIN} from './card.js';
 import {COPY} from './copy.js';
+import {paintPaper} from './paper.js';
 
 const $=s=>document.querySelector(s),main=$('#main'),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const colors=['#1833a0','#ffffff','#050505','#ff27ba','#e8341c','#ff9a1f','#ffe72b','#a4ee24','#00b96a','#00d4e8','#1263ff','#7222a4','#9a5a3c','#f7c6a3','#b4bacb','#5d5d6e'];
-const storage={get(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch{return false;}},remove(k){try{localStorage.removeItem(k);}catch{}}};
+const storageKey=k=>window.PD_PREVIEW_ACTIVE?window.PD_PREVIEW_STORAGE_PREFIX+k:k;
+const storage={get(k){try{return JSON.parse(localStorage.getItem(storageKey(k)));}catch{return null;}},set(k,v){try{localStorage.setItem(storageKey(k),JSON.stringify(v));return true;}catch{return false;}},remove(k){try{localStorage.removeItem(storageKey(k));}catch{}}};
 let seat=storage.get('pd-seat'),state=null,sketch=null,viewKey='',serverOffset=0,saveTimer,polling=false,saving=false,dirty=false,localOK=true,lastSaved=0,cardCache=new Map(),revealedIndex=-1,replayAbort,activeCard=null,hint=null,hintLocked=false;
 const artStore=document.createElement('div');artStore.hidden=true;document.body.append(artStore);
-const artCanvas=new Map(),live=new Set();
+const artCanvas=new Map(),live=new Set();let cardEpoch=0;
+function clearCardMemory(){cardEpoch++;replayAbort?.abort();live.clear();for(const c of artCanvas.values()){c.width=0;c.height=0;c.remove();}artCanvas.clear();cardCache.clear();activeCard=null;$('#card-dialog')?.close();if($('#card-detail'))$('#card-detail').replaceChildren();}
 
 /* ---------- markup helpers ---------- */
 // Scratch lettering. size in px; color is a kit token (ink, plum, ice, magenta, cyan, lime, sky) or hex.
@@ -31,6 +34,7 @@ async function api(path='',data,auth=true){const r=await fetch('/api/rooms'+path
 
 /* ---------- entry ---------- */
 function home(){
+  clearCardMemory();
   hint?.dispose();hint=null;sketch?.dispose();sketch=null;viewKey='home';
   const code=new URL(location.href).searchParams.get('room')||'',name=esc(storage.get('pd-name')||'');
   main.innerHTML=`<div class="home">
@@ -89,7 +93,7 @@ function drawingView(){
         <span class="timer" id="timer" aria-label="time left">${L('0:00',44,'magenta','id="timer-l"')}</span>
         <button id="hold-hint" class="wb-pill hint-button" data-tone="lime" aria-pressed="false" aria-label="${COPY.hint}">${L(COPY.hint,22,'ice')}</button>
       </div>
-      <div class="board-viewport"><canvas id="board" width="800" height="600" aria-label="drawing canvas"></canvas>
+      <div class="board-viewport"><canvas id="paper" width="400" height="300" aria-hidden="true"></canvas><canvas id="board" width="800" height="600" aria-label="drawing canvas"></canvas>
         <div id="hint-panel" class="hint-panel" aria-hidden="true" aria-live="polite"></div>
         <div id="board-overlay" class="board-overlay hidden"><div class="overlay-box">${L(COPY.submitted,48,'ink','id="overlay-l"')}</div></div>
       </div>
@@ -110,6 +114,7 @@ function drawingView(){
       ${pill(COPY.submit,'data-action="submit" class="wide"','',30)}
     </aside>
   </div>`,{cls:'draw-win',key:'draw:'+state.code+':'+state.round,field:'calm',right:L(COPY.round(state.round,state.rounds),20,'ice')}));
+  const paperFace=WB.face($('#paper'),c=>paintPaper(c,WB.boil().ink));paperFace.live=()=>true;
   sketch=new Sketch($('#board'),onDrawingChange,color=>setColor(color));
   hint=new HoldHint($('#hold-hint'),$('#hint-panel'),()=>api(`/${state.code}/hints`),locked=>{hintLocked=locked;if(sketch){if(locked&&sketch.current)sketch.commit();updateDrawing();}},notice,COPY);
   const forRound=state.round,local=storage.get(draftKey());
@@ -155,7 +160,7 @@ function refreshFaces(id){document.querySelectorAll(`[data-face="${id}"]`).forEa
 function bindFaces(){document.querySelectorAll('canvas[data-face]').forEach(cv=>{if(cv._wbFace)return;const id=cv.dataset.face;
   const f=WB.face(cv,c=>{const found=findCard(id);if(found)paintCard(c,cardSpec(found.card,found.round));});
   f.live=()=>live.has(id)||cv.closest('.pd-card')?.matches(':hover,:focus-visible')||!!cv.closest('#card-detail,.showcase');});}
-async function paintCards(){bindFaces();for(const round of rounds())for(const c of round.cards){try{const art=await getArt(c);if(!live.has(c.id))renderDrawing(artFor(c.id),art.ops);refreshFaces(c.id);}catch(e){notice(e.message);}}}
+async function paintCards(){const epoch=cardEpoch;bindFaces();for(const round of rounds())for(const c of round.cards){try{const art=await getArt(c);if(epoch!==cardEpoch)return;if(!live.has(c.id))renderDrawing(artFor(c.id),art.ops);refreshFaces(c.id);}catch(e){if(epoch===cardEpoch)notice(e.message);}}}
 async function replay(id,ms){const f=findCard(id);if(!f)return;replayAbort?.abort();replayAbort=new AbortController();const sig=replayAbort.signal;live.add(id);
   try{await replayDrawing(artFor(id),(await getArt(f.card)).ops,ms,sig);}finally{live.delete(id);refreshFaces(id);}}
 function comparison(){

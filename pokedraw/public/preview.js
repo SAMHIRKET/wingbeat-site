@@ -2,9 +2,13 @@
 // Off unless the page has ?preview=<stage> or sets window.PD_PREVIEW before loading.
 // Stages: home lobby drawing reveal voting results gallery
 const q=new URL(location.href).searchParams.get('preview'),h=location.hash.slice(1),useHash=!q&&!!window.PD_PREVIEW,stage=q||(useHash&&h)||window.PD_PREVIEW;
+// The artifact frame drops query strings, so the hosted preview switches screens by #hash.
 const go=s=>{if(useHash){location.hash=s;location.reload();}else location.search='?preview='+s;};
-if(stage){
-  const STAGES=['home','lobby','drawing','reveal','voting','results','gallery'];
+const STAGES=['home','lobby','drawing','reveal','voting','results','gallery'];
+if(STAGES.includes(stage)){
+  window.PD_PREVIEW_ACTIVE=true;
+  window.PD_PREVIEW_STORAGE_PREFIX=`pd-preview:${stage}:`;
+  const previewKey=k=>window.PD_PREVIEW_STORAGE_PREFIX+k;
   const now=()=>Date.now(),me='p1',code='KR4BZ';
   const names=['SAM','herew','hoss','jaggi','cocovin'];
   const players=names.map((n,i)=>({id:'p'+(i+1),name:n,ready:stage!=='lobby'||i%2===0,score:[3,5,1,2,0][i],submitted:i<2,online:i!==4}));
@@ -64,7 +68,8 @@ if(stage){
     }
     return json({error:'Not found'},404);
   };
-  try{if(stage==='home')localStorage.removeItem('pd-seat');else localStorage.setItem('pd-seat',JSON.stringify({code,token:'preview'}));localStorage.setItem('pd-tutorial','true');}catch{}
+  // Preview screens must never replace a player's real room seat or drafts.
+  try{if(stage==='home')localStorage.removeItem(previewKey('pd-seat'));else localStorage.setItem(previewKey('pd-seat'),JSON.stringify({code,token:'preview'}));localStorage.setItem(previewKey('pd-tutorial'),'true');}catch{}
   if(stage==='home')history.replaceState(null,'',location.pathname+location.search);
   // Stage switcher (preview only).
   addEventListener('DOMContentLoaded',()=>{
