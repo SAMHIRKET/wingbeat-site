@@ -48,6 +48,8 @@ export const COPY = {
   submit: 'done',
   tools: { pen: 'brush', eraser: 'eraser', fill: 'fill', picker: 'pick', line: 'line', rect: 'box', ellipse: 'ellipse', marquee: 'select', lasso: 'lasso', move: 'move', pan: 'hand' },
   tip: 'tip',
+  simple: 'simple',
+  advanced: 'advanced',
   tipRound: 'round',
   tipSquare: 'square',
   outline: 'outline',

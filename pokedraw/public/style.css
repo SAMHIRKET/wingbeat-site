@@ -269,3 +269,14 @@ dialog::backdrop{background:radial-gradient(circle,#1833a055 1.6px,transparent 2
   .tools .colour-box,.tools .tool-settings{grid-column:1/-1}
 }
 @media(max-width:560px){.tool-grid{grid-template-columns:repeat(5,1fr)}}
+
+/* simple / advanced tabs and tool groups */
+.mode-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.mode-tabs .wb-btn.active{background:#cffaff;outline:2px solid var(--magenta)}
+.tools[data-mode=simple] .adv{display:none!important}
+.tools[data-mode=simple] .tool kbd{display:none}
+.tool-groups{display:flex;flex-wrap:wrap;gap:10px 14px}
+.tool-group{display:flex;gap:6px;flex-wrap:nowrap}
+.tool-group .tool{width:52px;height:44px;flex:none}
+.tool-group.history{flex-basis:100%;padding-top:10px;border-top:2px dotted var(--ink)}
+@media(max-width:860px){.tool-group .tool{width:44px;height:42px}.tool-group.history{flex-basis:auto;padding-top:0;border-top:0;margin-left:auto}}

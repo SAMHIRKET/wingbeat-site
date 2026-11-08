@@ -32,7 +32,10 @@ const pillAttrs=a=>a.replace('class="wide"','');
 const pill=(label,attrs='',tone='',size=26)=>`<button class="wb-pill${/class="wide"/.test(attrs)?' wide':''}" ${tone?`data-tone="${tone}"`:''} ${pillAttrs(attrs)}>${L(label,size,'ice')}</button>`;
 const btn=(label,attrs='',cls='')=>`<button class="wb-btn ${cls}" ${attrs}>${esc(label)}</button>`;
 const ICON={pen:'<path d="M4 20l3-1 11-11-2-2L5 17z"/><path d="M14 6l2 2"/>',eraser:'<path d="M3 17l8-8 6 6-4 4H6z"/><path d="M13 19h8"/>',line:'<path d="M5 19L19 5"/>',rect:'<rect x="4" y="6" width="16" height="12"/>',ellipse:'<ellipse cx="12" cy="12" rx="8" ry="6"/>',fill:'<path d="M5 11l6-6 8 8-6 6z"/><path d="M19 15q2 3 0 4-2-1 0-4"/>',picker:'<path d="M14 4l6 6-2 2-6-6z"/><path d="M12 8l-7 7v4h4l7-7"/>',pan:'<path d="M8 12V6a1.5 1.5 0 013 0v5V4.5a1.5 1.5 0 013 0V11V6a1.5 1.5 0 013 0v8a6 6 0 01-6 6h-1a5 5 0 01-4-2l-3-4a1.5 1.5 0 012.5-1.7L8 14"/>',marquee:'<path d="M4 4h3M10 4h4M17 4h3v3M20 10v4M20 17v3h-3M14 20h-4M7 20H4v-3M4 14v-4M4 7V4"/>',lasso:'<path d="M12 5c5 0 8 2 8 5s-4 5-8 5-8-2-8-5 3-5 8-5z"/><path d="M6 13q-1 4 2 6"/>',move:'<path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/>',undo:'<path d="M9 7L4 12l5 5"/><path d="M4 12h10a6 6 0 010 12"/>',redo:'<path d="M15 7l5 5-5 5"/><path d="M20 12H10a6 6 0 000 12"/>'};
-const TOOLS=[['pen','B'],['eraser','E'],['fill','G'],['picker','I'],['line','L'],['rect','U'],['ellipse','⇧U'],['marquee','M'],['lasso','Q'],['move','V'],['pan','H']];
+// Tool groups: drawing, shapes, movement. Simple mode keeps brush, eraser and fill.
+const GROUPS=[['draw',[['pen','B'],['eraser','E'],['fill','G'],['picker','I']]],['shape',[['line','L'],['rect','U'],['ellipse','⇧U']]],['move',[['marquee','M'],['lasso','Q'],['move','V'],['pan','H']]]];
+const SIMPLE=['pen','eraser','fill'];
+const toolBtn=([t,k])=>`<button class="wb-btn tool ${t==='pen'?'active':''} ${SIMPLE.includes(t)?'':'adv'}" data-tool="${t}" aria-label="${COPY.tools[t]} (${k})" title="${COPY.tools[t]} (${k})">${icon(t)}<span>${COPY.tools[t]}</span><kbd>${k}</kbd></button>`;
 const icon=n=>`<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
 
 function notice(s){$('#notice').textContent=s;$('#notice').classList.add('visible');clearTimeout(notice.timer);notice.timer=setTimeout(()=>$('#notice').classList.remove('visible'),4800);}
@@ -106,23 +109,24 @@ function drawingView(){
       <div class="drawing-status"><span id="save-status"></span><span id="ready-count"></span></div>
     </div>
     <aside class="tools" aria-label="drawing tools">
-      <div class="tool-grid">${TOOLS.map(([t,k])=>`<button class="wb-btn tool ${t==='pen'?'active':''}" data-tool="${t}" aria-label="${COPY.tools[t]} (${k})" title="${COPY.tools[t]} (${k})">${icon(t)}<span>${COPY.tools[t]}</span><kbd>${k}</kbd></button>`).join('')}
-        <button class="wb-btn tool" data-action="undo" aria-label="${COPY.undo}" title="${COPY.undo} (Ctrl+Z)">${icon('undo')}<span>${COPY.undo}</span></button><button class="wb-btn tool" data-action="redo" aria-label="${COPY.redo}" title="${COPY.redo} (Ctrl+Y)">${icon('redo')}<span>${COPY.redo}</span></button></div>
+      <div class="mode-tabs" role="tablist">${['simple','advanced'].map(m=>`<button class="wb-btn small" role="tab" data-mode="${m}">${COPY[m]}</button>`).join('')}</div>
+      <div class="tool-groups">${GROUPS.map(([g,ts])=>`<div class="tool-group ${g==='draw'?'':'adv'}" data-group="${g}">${ts.map(toolBtn).join('')}</div>`).join('')}
+        <div class="tool-group history" data-group="history"><button class="wb-btn tool" data-action="undo" aria-label="${COPY.undo} (Ctrl+Z)" title="${COPY.undo} (Ctrl+Z)">${icon('undo')}<span>${COPY.undo}</span></button><button class="wb-btn tool" data-action="redo" aria-label="${COPY.redo} (Ctrl+Y)" title="${COPY.redo} (Ctrl+Y)">${icon('redo')}<span>${COPY.redo}</span></button></div></div>
       <div class="tool-settings" id="tool-settings">
         <label class="range" data-for="pen eraser line rect ellipse">${COPY.size}<input id="brush-size" type="range" min="1" max="60" value="7"><output id="size-value">7</output></label>
-        <div class="seg" data-for="pen eraser line rect ellipse" role="group" aria-label="${COPY.tip}">${['round','square'].map(t=>`<button class="wb-btn small ${t==='round'?'active':''}" data-tip="${t}">${t==="round"?COPY.tipRound:COPY.tipSquare}</button>`).join('')}</div>
-        <div class="seg" data-for="rect ellipse" role="group" aria-label="${COPY.filled}">${[[false,COPY.outline],[true,COPY.filled]].map(([v,l])=>`<button class="wb-btn small ${v?'':'active'}" data-filled="${v}">${l}</button>`).join('')}</div>
-        <label class="check" data-for="pen"><input type="checkbox" id="pixel-perfect" checked>${COPY.pixelPerfect}</label>
-        <label class="range" data-for="pen line rect ellipse fill">${COPY.opacity}<input id="opacity" type="range" min="5" max="100" value="100"><output id="opacity-value">100</output></label>
-        <label class="check" data-for="pen eraser"><input type="checkbox" id="pressure" checked>${COPY.pressure}</label>
-        <div class="seg" data-for="marquee lasso move">${btn(COPY.deselect,'data-action="deselect" title="Esc"','small')}${btn(COPY.cut,'data-action="erase-selection" title="Delete"','small danger')}</div>
-        <div class="zoom-row" data-for="pan">${btn('-','data-action="zoom-out" aria-label="zoom out"','small')}<output id="zoom-value">100%</output>${btn('+','data-action="zoom-in" aria-label="zoom in"','small')}${btn('1:1','data-action="zoom-reset" aria-label="reset zoom"','small')}</div>
+        <div class="seg adv" data-for="pen eraser line rect ellipse" role="group" aria-label="${COPY.tip}">${['round','square'].map(t=>`<button class="wb-btn small ${t==='round'?'active':''}" data-tip="${t}">${t==="round"?COPY.tipRound:COPY.tipSquare}</button>`).join('')}</div>
+        <div class="seg adv" data-for="rect ellipse" role="group" aria-label="${COPY.filled}">${[[false,COPY.outline],[true,COPY.filled]].map(([v,l])=>`<button class="wb-btn small ${v?'':'active'}" data-filled="${v}">${l}</button>`).join('')}</div>
+        <label class="check adv" data-for="pen"><input type="checkbox" id="pixel-perfect" checked>${COPY.pixelPerfect}</label>
+        <label class="range adv" data-for="pen line rect ellipse fill">${COPY.opacity}<input id="opacity" type="range" min="5" max="100" value="100"><output id="opacity-value">100</output></label>
+        <label class="check adv" data-for="pen eraser"><input type="checkbox" id="pressure" checked>${COPY.pressure}</label>
+        <div class="seg adv" data-for="marquee lasso move">${btn(COPY.deselect,'data-action="deselect" title="Esc"','small')}${btn(COPY.cut,'data-action="erase-selection" title="Delete"','small danger')}</div>
+        <div class="zoom-row adv" data-for="pan">${btn('-','data-action="zoom-out" aria-label="zoom out"','small')}<output id="zoom-value">100%</output>${btn('+','data-action="zoom-in" aria-label="zoom in"','small')}${btn('1:1','data-action="zoom-reset" aria-label="reset zoom"','small')}</div>
       </div>
       <div class="colour-box">
-        <div class="colour-head"><span class="current" id="current-colour" style="--c:${colors[0]}"></span><label class="colour">${COPY.custom}<input id="custom-color" type="color" value="${colors[0]}"></label>${btn(COPY.wheel,'data-action="palette-mode" aria-pressed="false"','small')}</div>
+        <div class="colour-head"><span class="current" id="current-colour" style="--c:${colors[0]}"></span><label class="colour adv">${COPY.custom}<input id="custom-color" type="color" value="${colors[0]}"></label>${btn(COPY.wheel,'data-action="palette-mode" aria-pressed="false"','small adv')}</div>
         <div class="palette" id="swatches">${colors.map((c,i)=>`<button class="swatch ${i?'':'active'}" style="--c:${c}" data-color="${c}" aria-label="colour ${c}"></button>`).join('')}</div>
         <div class="wheel hidden" id="wheel-box"><canvas id="wheel" width="180" height="180" aria-label="${COPY.wheel}"></canvas><input id="wheel-value" type="range" min="0" max="100" value="100" aria-label="${COPY.value}" orient="vertical"></div>
-        <div class="ramp" id="ramp" aria-label="${COPY.shades}"></div>
+        <div class="ramp adv" id="ramp" aria-label="${COPY.shades}"></div>
       </div>
       <div class="adv-row">${btn(COPY.clear,'data-action="clear"','small danger')}${btn(COPY.saveSketch,'data-action="save-sketch"','small')}</div>
       ${pill(COPY.submit,'data-action="submit" class="wide"','',30)}
@@ -145,7 +149,7 @@ function drawingView(){
   wheel.onpointermove=e=>{if(wheelDrag)pickWheel(e);};
   wheel.onpointerup=wheel.onpointercancel=()=>wheelDrag=false;
   $('#wheel-value').oninput=()=>{const [h,s]=hsv(sketch.color);setColor(hsvHex(h,s,+$('#wheel-value').value/100));};
-  setTool('pen');setColor(colors[0]);
+  setTool('pen');setColor(colors[0]);setMode(storage.get('pd-tools-mode')||'simple');
   updateDrawing();
 }
 function draftKey(){return `pd-draft:${seat.code}:${state.round}`;}
@@ -159,6 +163,12 @@ function setColor(color){if(!sketch)return;color=color.toLowerCase();sketch.colo
   // The ramp follows a pick from the swatches, wheel or eyedropper, but not a pick from the ramp itself.
   const r=$('#ramp');if(r&&!r.querySelector(`[data-color="${color}"]`))r.innerHTML=ramp(color).map(c=>`<button class="swatch shade ${c===color?'active':''}" style="--c:${c}" data-color="${c}" aria-label="colour ${c}"></button>`).join('');
   if($('#wheel')&&!$('#wheel-box').classList.contains('hidden'))markWheel($('#wheel'),color,+$('#wheel-value').value/100);}
+// Simple mode hides the advanced tools and puts their settings back to plain defaults.
+function setMode(m){if(!sketch)return;const tools=$('.tools');if(!tools)return;tools.dataset.mode=m;storage.set('pd-tools-mode',m);
+  document.querySelectorAll('[data-mode]').forEach(el=>{const on=el.dataset.mode===m;el.classList.toggle('active',on);el.setAttribute('aria-selected',on);});
+  if(m==='simple'){if(!SIMPLE.includes(sketch.tool))setTool('pen');sketch.deselect();sketch.tip='round';sketch.pp=true;sketch.filled=false;sketch.alpha=1;
+    $('#opacity').value=100;$('#opacity-value').textContent='100';$('#pixel-perfect').checked=true;document.querySelectorAll('[data-tip]').forEach(el=>el.classList.toggle('active',el.dataset.tip==='round'));document.querySelectorAll('[data-filled]').forEach(el=>el.classList.toggle('active',el.dataset.filled==='false'));
+    if(!$('#wheel-box').classList.contains('hidden'))$('[data-action="palette-mode"]').click();}}
 function setSize(n){if(!sketch)return;n=Math.max(1,Math.min(60,Math.round(n)));sketch.size=n;$('#brush-size').value=n;$('#size-value').textContent=n;}
 function setTool(t){if(!sketch)return;sketch.tool=t;  document.querySelectorAll('[data-tool]').forEach(el=>el.classList.toggle('active',el.dataset.tool===t));
   document.querySelectorAll('#tool-settings [data-for]').forEach(el=>el.hidden=!el.dataset.for.split(' ').includes(t));
@@ -258,6 +268,7 @@ buildChrome();
 document.addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;
   try{
     if(b.dataset.join){$('#join-form [name="code"]').value=b.dataset.join;$('#join-form [name="name"]').focus();$('#join-form').scrollIntoView({behavior:'smooth',block:'center'});return;}
+    if(b.dataset.mode&&sketch){setMode(b.dataset.mode);return;}
     if(b.dataset.tool&&sketch){setTool(b.dataset.tool);return;}
     if(b.dataset.tip&&sketch){sketch.tip=b.dataset.tip;b.parentElement.querySelectorAll('button').forEach(el=>el.classList.toggle('active',el===b));return;}
     if(b.dataset.filled&&sketch){sketch.filled=b.dataset.filled==='true';b.parentElement.querySelectorAll('button').forEach(el=>el.classList.toggle('active',el===b));return;}
@@ -293,12 +304,13 @@ document.addEventListener('keydown',e=>{if(!sketch||!sketch.canvas.isConnected||
   if(mod&&k==='y'){e.preventDefault();sketch.redo();return;}
   if(mod&&k==='d'){e.preventDefault();sketch.deselect();return;}
   if(mod||e.altKey)return;
-  if(e.key===' '){e.preventDefault();if(!sketch.spaceHeld){sketch.spaceHeld=true;sketch.canvas.dataset.tool='pan';}return;}
+  if(e.key===' '&&$('.tools')?.dataset.mode!=='simple'){e.preventDefault();if(!sketch.spaceHeld){sketch.spaceHeld=true;sketch.canvas.dataset.tool='pan';}return;}
   if(e.key==='Escape'){sketch.deselect();return;}
   if((e.key==='Delete'||e.key==='Backspace')&&sketch.sel){e.preventDefault();sketch.eraseSelection();return;}
   if(e.key.startsWith('Arrow')&&sketch.sel){e.preventDefault();const n=e.shiftKey?10:1;sketch.nudge(e.key==='ArrowLeft'?-n:e.key==='ArrowRight'?n:0,e.key==='ArrowUp'?-n:e.key==='ArrowDown'?n:0);return;}
-  if(k==='u'&&e.shiftKey){setTool('ellipse');return;}
-  if(KEYS[k]){setTool(KEYS[k]);return;}
+  if(k==='u'&&e.shiftKey){if($('.tools')?.dataset.mode!=='simple')setTool('ellipse');return;}
+  const simple=$('.tools')?.dataset.mode==='simple';
+  if(KEYS[k]){if(!simple||SIMPLE.includes(KEYS[k]))setTool(KEYS[k]);return;}
   if(e.key==='['){setSize(sketch.size-1);return;}if(e.key===']'){setSize(sketch.size+1);return;}
   if(e.key==='+'||e.key==='='){sketch.setZoom(sketch.zoom*1.25);return;}if(e.key==='-'){sketch.setZoom(sketch.zoom*.8);return;}if(e.key==='1'){sketch.setZoom(1);return;}});
 document.addEventListener('keyup',e=>{if(e.key===' '&&sketch){sketch.spaceHeld=false;sketch.canvas.dataset.tool=sketch.tool;}});
