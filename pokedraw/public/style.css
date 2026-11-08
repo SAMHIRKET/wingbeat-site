@@ -231,3 +231,41 @@ dialog::backdrop{background:radial-gradient(circle,#1833a055 1.6px,transparent 2
   .room-code{width:150px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+/* Aseprite-style tool panel */
+.tool kbd{font:bold 10px/1 monospace;opacity:.6}
+.tools{min-width:0}
+.tool-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.tool{position:relative;justify-content:center;padding:8px 0;min-width:0}
+.tool span{display:none}
+.tool kbd{position:absolute;right:2px;bottom:2px;margin:0;padding:1px 2px;font-size:8px;border:0}
+.tool-settings{display:grid;gap:8px;padding:10px;border:2px dotted var(--ink);background:#ffffffaa}
+.tool-settings [hidden]{display:none!important}
+.tool-settings .range{display:grid;grid-template-columns:auto 1fr 2.2em;gap:8px}
+.tool-settings output{font-weight:bold;font-size:.8rem;text-align:right}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg .wb-btn.active{background:#cffaff;outline:2px solid var(--magenta)}
+.colour-box{display:grid;gap:8px}
+.colour-head{display:flex;gap:8px;align-items:center}
+.colour-head .current{width:34px;height:34px;flex:none;border:3px solid var(--ink);background:var(--c);box-shadow:3px 3px 0 #7222a455}
+.colour-head .colour{flex:1;display:flex;gap:6px;align-items:center;min-width:0}
+.colour-head .colour input{width:40px;flex:none}
+.ramp{display:grid;grid-template-columns:repeat(9,1fr);gap:0;border:2px solid var(--ink)}
+.ramp .swatch.shade{border:0;border-radius:0;min-height:24px;background:var(--c)}
+.ramp .swatch.shade.active{outline:3px solid var(--magenta);outline-offset:-3px;transform:none}
+.wheel{display:flex;gap:10px;align-items:center;justify-content:center}
+.wheel canvas{width:180px;height:180px;border-radius:50%;border:3px solid var(--ink);touch-action:none;cursor:crosshair}
+.wheel input[type=range]{writing-mode:vertical-lr;direction:rtl;width:30px;height:170px}
+.hidden{display:none!important}
+#board[data-tool=pan]{cursor:grab}
+#board[data-tool=picker]{cursor:copy}
+#board[data-tool=move]{cursor:move}
+#board{cursor:crosshair}
+@media (hover:none){.tool kbd{display:none}}
+@media(max-width:860px){
+  .tool-grid{grid-template-columns:repeat(7,1fr);grid-column:1/-1}
+  .tool kbd,.tool span{display:none}
+  .tool{justify-content:center;padding:6px 0}
+  .tools .colour-box,.tools .tool-settings{grid-column:1/-1}
+}
+@media(max-width:560px){.tool-grid{grid-template-columns:repeat(5,1fr)}}

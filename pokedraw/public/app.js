@@ -7,6 +7,7 @@ import * as WB from './kit.js';
 import {paintCard,exportCard,CARD_W,CARD_H,MARGIN} from './card.js';
 import {COPY} from './copy.js';
 import {paintPaper} from './paper.js';
+import {ramp,markWheel,wheelAt,hexToHsv,hsvToHex} from './palette.js';
 
 const $=s=>document.querySelector(s),main=$('#main'),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const colors=['#1833a0','#ffffff','#050505','#ff27ba','#e8341c','#ff9a1f','#ffe72b','#a4ee24','#00b96a','#00d4e8','#1263ff','#7222a4','#9a5a3c','#f7c6a3','#b4bacb','#5d5d6e'];
@@ -30,7 +31,8 @@ function win(title,body,{cls='',key='',field='',right='',tone=''}={}){return `<s
 const pillAttrs=a=>a.replace('class="wide"','');
 const pill=(label,attrs='',tone='',size=26)=>`<button class="wb-pill${/class="wide"/.test(attrs)?' wide':''}" ${tone?`data-tone="${tone}"`:''} ${pillAttrs(attrs)}>${L(label,size,'ice')}</button>`;
 const btn=(label,attrs='',cls='')=>`<button class="wb-btn ${cls}" ${attrs}>${esc(label)}</button>`;
-const ICON={pen:'<path d="M4 20l3-1 11-11-2-2L5 17z"/><path d="M14 6l2 2"/>',eraser:'<path d="M3 17l8-8 6 6-4 4H6z"/><path d="M13 19h8"/>',line:'<path d="M5 19L19 5"/>',rect:'<rect x="4" y="6" width="16" height="12"/>',ellipse:'<ellipse cx="12" cy="12" rx="8" ry="6"/>',fill:'<path d="M5 11l6-6 8 8-6 6z"/><path d="M19 15q2 3 0 4-2-1 0-4"/>',picker:'<path d="M14 4l6 6-2 2-6-6z"/><path d="M12 8l-7 7v4h4l7-7"/>',pan:'<path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/>',undo:'<path d="M9 7L4 12l5 5"/><path d="M4 12h10a6 6 0 010 12"/>',redo:'<path d="M15 7l5 5-5 5"/><path d="M20 12H10a6 6 0 000 12"/>'};
+const ICON={pen:'<path d="M4 20l3-1 11-11-2-2L5 17z"/><path d="M14 6l2 2"/>',eraser:'<path d="M3 17l8-8 6 6-4 4H6z"/><path d="M13 19h8"/>',line:'<path d="M5 19L19 5"/>',rect:'<rect x="4" y="6" width="16" height="12"/>',ellipse:'<ellipse cx="12" cy="12" rx="8" ry="6"/>',fill:'<path d="M5 11l6-6 8 8-6 6z"/><path d="M19 15q2 3 0 4-2-1 0-4"/>',picker:'<path d="M14 4l6 6-2 2-6-6z"/><path d="M12 8l-7 7v4h4l7-7"/>',pan:'<path d="M8 12V6a1.5 1.5 0 013 0v5V4.5a1.5 1.5 0 013 0V11V6a1.5 1.5 0 013 0v8a6 6 0 01-6 6h-1a5 5 0 01-4-2l-3-4a1.5 1.5 0 012.5-1.7L8 14"/>',marquee:'<path d="M4 4h3M10 4h4M17 4h3v3M20 10v4M20 17v3h-3M14 20h-4M7 20H4v-3M4 14v-4M4 7V4"/>',lasso:'<path d="M12 5c5 0 8 2 8 5s-4 5-8 5-8-2-8-5 3-5 8-5z"/><path d="M6 13q-1 4 2 6"/>',move:'<path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/>',undo:'<path d="M9 7L4 12l5 5"/><path d="M4 12h10a6 6 0 010 12"/>',redo:'<path d="M15 7l5 5-5 5"/><path d="M20 12H10a6 6 0 000 12"/>'};
+const TOOLS=[['pen','B'],['eraser','E'],['fill','G'],['picker','I'],['line','L'],['rect','U'],['ellipse','⇧U'],['marquee','M'],['lasso','Q'],['move','V'],['pan','H']];
 const icon=n=>`<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
 
 function notice(s){$('#notice').textContent=s;$('#notice').classList.add('visible');clearTimeout(notice.timer);notice.timer=setTimeout(()=>$('#notice').classList.remove('visible'),4800);}
@@ -104,17 +106,25 @@ function drawingView(){
       <div class="drawing-status"><span id="save-status"></span><span id="ready-count"></span></div>
     </div>
     <aside class="tools" aria-label="drawing tools">
-      <div class="tool-grid">${['pen','eraser'].map((t,i)=>`<button class="wb-btn tool ${i?'':'active'}" data-tool="${t}" aria-label="${COPY.tools[t]}">${icon(t)}<span>${COPY.tools[t]}</span></button>`).join('')}
-        <button class="wb-btn tool" data-action="undo" aria-label="${COPY.undo}">${icon('undo')}<span>${COPY.undo}</span></button><button class="wb-btn tool" data-action="redo" aria-label="${COPY.redo}">${icon('redo')}<span>${COPY.redo}</span></button></div>
-      <div class="palette">${colors.map((c,i)=>`<button class="swatch ${i?'':'active'}" style="--c:${c}" data-color="${c}" aria-label="colour ${c}"></button>`).join('')}</div>
-      <label class="range">${COPY.size}<input id="brush-size" type="range" min="1" max="60" value="7"></label>
-      <details class="advanced"><summary class="wb-btn">${COPY.more}</summary><div class="advanced-body">
-        <div class="tool-grid">${['line','rect','ellipse','fill','picker','pan'].map(t=>`<button class="wb-btn tool" data-tool="${t}" aria-label="${COPY.tools[t]}">${icon(t)}<span>${COPY.tools[t]}</span></button>`).join('')}</div>
-        <div class="adv-row"><label class="colour">${COPY.custom}<input id="custom-color" type="color" value="#1833a0"></label><label class="range">${COPY.opacity}<input id="opacity" type="range" min="5" max="100" value="100"></label></div>
-        <label class="check"><input type="checkbox" id="pressure" checked>${COPY.pressure}</label>
-        <div class="zoom-row">${btn('-','data-action="zoom-out" aria-label="zoom out"','small')}<output id="zoom-value">100%</output>${btn('+','data-action="zoom-in" aria-label="zoom in"','small')}${btn('1:1','data-action="zoom-reset" aria-label="reset zoom"','small')}</div>
-        <div class="adv-row">${btn(COPY.clear,'data-action="clear"','small danger')}${btn(COPY.saveSketch,'data-action="save-sketch"','small')}</div>
-      </div></details>
+      <div class="tool-grid">${TOOLS.map(([t,k])=>`<button class="wb-btn tool ${t==='pen'?'active':''}" data-tool="${t}" aria-label="${COPY.tools[t]} (${k})" title="${COPY.tools[t]} (${k})">${icon(t)}<span>${COPY.tools[t]}</span><kbd>${k}</kbd></button>`).join('')}
+        <button class="wb-btn tool" data-action="undo" aria-label="${COPY.undo}" title="${COPY.undo} (Ctrl+Z)">${icon('undo')}<span>${COPY.undo}</span></button><button class="wb-btn tool" data-action="redo" aria-label="${COPY.redo}" title="${COPY.redo} (Ctrl+Y)">${icon('redo')}<span>${COPY.redo}</span></button></div>
+      <div class="tool-settings" id="tool-settings">
+        <label class="range" data-for="pen eraser line rect ellipse">${COPY.size}<input id="brush-size" type="range" min="1" max="60" value="7"><output id="size-value">7</output></label>
+        <div class="seg" data-for="pen eraser line rect ellipse" role="group" aria-label="${COPY.tip}">${['round','square'].map(t=>`<button class="wb-btn small ${t==='round'?'active':''}" data-tip="${t}">${t==="round"?COPY.tipRound:COPY.tipSquare}</button>`).join('')}</div>
+        <div class="seg" data-for="rect ellipse" role="group" aria-label="${COPY.filled}">${[[false,COPY.outline],[true,COPY.filled]].map(([v,l])=>`<button class="wb-btn small ${v?'':'active'}" data-filled="${v}">${l}</button>`).join('')}</div>
+        <label class="check" data-for="pen"><input type="checkbox" id="pixel-perfect" checked>${COPY.pixelPerfect}</label>
+        <label class="range" data-for="pen line rect ellipse fill">${COPY.opacity}<input id="opacity" type="range" min="5" max="100" value="100"><output id="opacity-value">100</output></label>
+        <label class="check" data-for="pen eraser"><input type="checkbox" id="pressure" checked>${COPY.pressure}</label>
+        <div class="seg" data-for="marquee lasso move">${btn(COPY.deselect,'data-action="deselect" title="Esc"','small')}${btn(COPY.cut,'data-action="erase-selection" title="Delete"','small danger')}</div>
+        <div class="zoom-row" data-for="pan">${btn('-','data-action="zoom-out" aria-label="zoom out"','small')}<output id="zoom-value">100%</output>${btn('+','data-action="zoom-in" aria-label="zoom in"','small')}${btn('1:1','data-action="zoom-reset" aria-label="reset zoom"','small')}</div>
+      </div>
+      <div class="colour-box">
+        <div class="colour-head"><span class="current" id="current-colour" style="--c:${colors[0]}"></span><label class="colour">${COPY.custom}<input id="custom-color" type="color" value="${colors[0]}"></label>${btn(COPY.wheel,'data-action="palette-mode" aria-pressed="false"','small')}</div>
+        <div class="palette" id="swatches">${colors.map((c,i)=>`<button class="swatch ${i?'':'active'}" style="--c:${c}" data-color="${c}" aria-label="colour ${c}"></button>`).join('')}</div>
+        <div class="wheel hidden" id="wheel-box"><canvas id="wheel" width="180" height="180" aria-label="${COPY.wheel}"></canvas><input id="wheel-value" type="range" min="0" max="100" value="100" aria-label="${COPY.value}" orient="vertical"></div>
+        <div class="ramp" id="ramp" aria-label="${COPY.shades}"></div>
+      </div>
+      <div class="adv-row">${btn(COPY.clear,'data-action="clear"','small danger')}${btn(COPY.saveSketch,'data-action="save-sketch"','small')}</div>
       ${pill(COPY.submit,'data-action="submit" class="wide"','',30)}
     </aside>
   </div>`,{cls:'draw-win',key:'draw:'+state.code+':'+state.round,field:'calm',right:L(COPY.round(state.round,state.rounds),20,'ice')}));
@@ -124,11 +134,18 @@ function drawingView(){
   const forRound=state.round,local=storage.get(draftKey());
   if(local)sketch.load(local);
   api(`/${state.code}/draft/${forRound}`).then(d=>{if(!sketch||state.round!==forRound||state.stage!=='drawing')return;if(d.revision>sketch.revision)sketch.load(d);lastSaved=d.revision;if(sketch.revision>d.revision){dirty=true;flush();}updateDrawing();}).catch(e=>notice(e.message));
-  $('#brush-size').oninput=e=>sketch.size=+e.target.value;
-  $('#opacity').oninput=e=>sketch.alpha=+e.target.value/100;
+  $('#brush-size').oninput=e=>setSize(+e.target.value);
+  $('#opacity').oninput=e=>{sketch.alpha=+e.target.value/100;$('#opacity-value').textContent=e.target.value;};
   $('#custom-color').oninput=e=>setColor(e.target.value);
   $('#pressure').onchange=e=>sketch.pressure=e.target.checked;
-  sketch.color=colors[0];
+  $('#pixel-perfect').onchange=e=>sketch.pp=e.target.checked;
+  const wheel=$('#wheel');let wheelDrag=false;
+  const pickWheel=e=>setColor(wheelAt(wheel,e,+$('#wheel-value').value/100));
+  wheel.onpointerdown=e=>{wheelDrag=true;wheel.setPointerCapture(e.pointerId);pickWheel(e);};
+  wheel.onpointermove=e=>{if(wheelDrag)pickWheel(e);};
+  wheel.onpointerup=wheel.onpointercancel=()=>wheelDrag=false;
+  $('#wheel-value').oninput=()=>{const [h,s]=hsv(sketch.color);setColor(hsvHex(h,s,+$('#wheel-value').value/100));};
+  setTool('pen');setColor(colors[0]);
   updateDrawing();
 }
 function draftKey(){return `pd-draft:${seat.code}:${state.round}`;}
@@ -137,7 +154,16 @@ async function flush(){if(saving||!dirty||!sketch||state.stage!=='drawing'||stat
   try{await api(`/${seat.code}/save`,{round,drawing:d});lastSaved=d.revision;if($('#save-status'))$('#save-status').textContent=COPY.saved;}
   catch(e){dirty=true;if($('#save-status'))$('#save-status').textContent=COPY.offline;}
   finally{saving=false;if(dirty&&sketch&&state.stage==='drawing'&&Date.now()+serverOffset<state.deadline)setTimeout(flush,1300);}}
-function setColor(color){if(!sketch)return;sketch.color=color;document.querySelectorAll('[data-color]').forEach(el=>el.classList.toggle('active',el.dataset.color===color));if($('#custom-color'))$('#custom-color').value=color;}
+function setColor(color){if(!sketch)return;color=color.toLowerCase();sketch.color=color;document.querySelectorAll('[data-color]').forEach(el=>el.classList.toggle('active',el.dataset.color===color));if($('#custom-color'))$('#custom-color').value=color;
+  const cur=$('#current-colour');if(cur)cur.style.setProperty('--c',color);
+  // The ramp follows a pick from the swatches, wheel or eyedropper, but not a pick from the ramp itself.
+  const r=$('#ramp');if(r&&!r.querySelector(`[data-color="${color}"]`))r.innerHTML=ramp(color).map(c=>`<button class="swatch shade ${c===color?'active':''}" style="--c:${c}" data-color="${c}" aria-label="colour ${c}"></button>`).join('');
+  if($('#wheel')&&!$('#wheel-box').classList.contains('hidden'))markWheel($('#wheel'),color,+$('#wheel-value').value/100);}
+function setSize(n){if(!sketch)return;n=Math.max(1,Math.min(60,Math.round(n)));sketch.size=n;$('#brush-size').value=n;$('#size-value').textContent=n;}
+function setTool(t){if(!sketch)return;sketch.tool=t;  document.querySelectorAll('[data-tool]').forEach(el=>el.classList.toggle('active',el.dataset.tool===t));
+  document.querySelectorAll('#tool-settings [data-for]').forEach(el=>el.hidden=!el.dataset.for.split(' ').includes(t));
+  sketch.canvas.dataset.tool=t;}
+const hsv=hexToHsv,hsvHex=hsvToHex;
 function updateDrawing(){if(!state)return;
   const remaining=Math.max(0,Math.ceil((state.deadline-Date.now()-serverOffset)/1000)),t=`${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}`;
   const tl=$('#timer-l');if(tl){WB.setText(tl,t);$('#timer').classList.toggle('urgent',remaining<=10);}
@@ -206,7 +232,7 @@ async function poll(){if(!seat||polling)return;polling=true;
       if(state.stage==='lobby')lobby();else if(state.stage==='drawing')drawingView();else comparison();}
     else updateDrawing();
     const cn=$('#connection');if(cn){cn.textContent=COPY.connected;cn.classList.remove('offline');}}
-  catch(e){if([403,404].includes(e.status)){seat=null;state=null;storage.remove('pd-seat');home();notice(e.message);}else{const cn=$('#connection');if(cn){cn.textContent=COPY.reconnecting;cn.classList.add('offline');}}}
+  catch(e){console.error(e);if([403,404].includes(e.status)){seat=null;state=null;storage.remove('pd-seat');home();notice(e.message);}else{const cn=$('#connection');if(cn){cn.textContent=COPY.reconnecting;cn.classList.add('offline');}}}
   finally{polling=false;}}
 
 /* ---------- tutorial ---------- */
@@ -231,7 +257,9 @@ buildChrome();
 document.addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;
   try{
     if(b.dataset.join){$('#join-form [name="code"]').value=b.dataset.join;$('#join-form [name="name"]').focus();$('#join-form').scrollIntoView({behavior:'smooth',block:'center'});return;}
-    if(b.dataset.tool&&sketch){sketch.tool=b.dataset.tool;document.querySelectorAll('[data-tool]').forEach(el=>el.classList.toggle('active',el===b));return;}
+    if(b.dataset.tool&&sketch){setTool(b.dataset.tool);return;}
+    if(b.dataset.tip&&sketch){sketch.tip=b.dataset.tip;b.parentElement.querySelectorAll('button').forEach(el=>el.classList.toggle('active',el===b));return;}
+    if(b.dataset.filled&&sketch){sketch.filled=b.dataset.filled==='true';b.parentElement.querySelectorAll('button').forEach(el=>el.classList.toggle('active',el===b));return;}
     if(b.dataset.color){setColor(b.dataset.color);return;}
     if(b.dataset.card&&!b.closest('#card-detail,.showcase')){await openCard(b.dataset.card);return;}
     if(b.dataset.card&&b.closest('.showcase')){await openCard(b.dataset.card);return;}
@@ -242,8 +270,10 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button');i
     else if(action==='refresh-public')await loadPublic();
     else if(action==='invite'){const url=new URL(inviteBase());url.searchParams.set('room',seat.code);try{await navigator.clipboard.writeText(url.href);notice(url.href);}catch{prompt('Invite link',url.href);}}
     else if(['ready','start','gallery'].includes(action)){b.disabled=true;await act(action);}
+    else if(action==='palette-mode'){const on=$('#wheel-box').classList.toggle('hidden')===false;$('#swatches').classList.toggle('hidden',on);b.setAttribute('aria-pressed',on);b.textContent=on?COPY.swatches:COPY.wheel;if(on){$('#wheel-value').value=Math.round(hsv(sketch.color)[2]*100);markWheel($('#wheel'),sketch.color,+$('#wheel-value').value/100);}}
+    else if(action==='deselect')sketch?.deselect();else if(action==='erase-selection')sketch?.eraseSelection();
     else if(action==='undo')sketch?.undo();else if(action==='redo')sketch?.redo();
-    else if(action==='zoom-in')sketch?.setZoom(sketch.zoom+.5);else if(action==='zoom-out')sketch?.setZoom(sketch.zoom-.5);else if(action==='zoom-reset')sketch?.setZoom(1);
+    else if(action==='zoom-in')sketch?.setZoom(sketch.zoom*1.25);else if(action==='zoom-out')sketch?.setZoom(sketch.zoom*.8);else if(action==='zoom-reset')sketch?.setZoom(1);
     else if(action==='clear'){if(hintLocked)return;if(confirm('Clear the drawing?'))sketch.clear();}
     else if(action==='submit'){if(!sketch.ops.length)return;b.disabled=true;await act('submit',{round:state.round,drawing:sketch.snapshot()});}
     else if(action==='save-sketch')await saveCanvas(sketch.canvas,`pokedraw-${state.prompt}-sketch.png`);
@@ -254,7 +284,24 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button');i
     else if(action==='leave'){if(state.stage==='drawing'&&!confirm('Leave this round? Your drawing stays saved.'))return;await flush();await api(`/${seat.code}/leave`,{});seat=null;state=null;storage.remove('pd-seat');history.replaceState(null,'',location.pathname);home();}
     else if(action==='delete'){if(confirm('Delete this room and every card on the server? Save the ones you want first.')){await api(`/${seat.code}/delete`,{});const prefix=`pd-draft:${seat.code}:`;for(let i=localStorage.length-1;i>=0;i--){const key=localStorage.key(i);if(key?.startsWith(prefix))storage.remove(key);}seat=null;state=null;storage.remove('pd-seat');history.replaceState(null,'',location.pathname);home();}}
   }catch(error){notice(error.message);b.disabled=false;}});
-document.addEventListener('keydown',e=>{if(!sketch||['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();if(e.shiftKey)sketch.redo();else sketch.undo();}});
+// Aseprite-style keys.
+const KEYS={b:'pen',e:'eraser',g:'fill',i:'picker',l:'line',u:'rect',m:'marquee',q:'lasso',v:'move',h:'pan'};
+const typing=e=>['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)&&e.target.type!=='range'&&e.target.type!=='checkbox';
+document.addEventListener('keydown',e=>{if(!sketch||!sketch.canvas.isConnected||typing(e))return;const k=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;
+  if(mod&&k==='z'){e.preventDefault();if(e.shiftKey)sketch.redo();else sketch.undo();return;}
+  if(mod&&k==='y'){e.preventDefault();sketch.redo();return;}
+  if(mod&&k==='d'){e.preventDefault();sketch.deselect();return;}
+  if(mod||e.altKey)return;
+  if(e.key===' '){e.preventDefault();if(!sketch.spaceHeld){sketch.spaceHeld=true;sketch.canvas.dataset.tool='pan';}return;}
+  if(e.key==='Escape'){sketch.deselect();return;}
+  if((e.key==='Delete'||e.key==='Backspace')&&sketch.sel){e.preventDefault();sketch.eraseSelection();return;}
+  if(e.key.startsWith('Arrow')&&sketch.sel){e.preventDefault();const n=e.shiftKey?10:1;sketch.nudge(e.key==='ArrowLeft'?-n:e.key==='ArrowRight'?n:0,e.key==='ArrowUp'?-n:e.key==='ArrowDown'?n:0);return;}
+  if(k==='u'&&e.shiftKey){setTool('ellipse');return;}
+  if(KEYS[k]){setTool(KEYS[k]);return;}
+  if(e.key==='['){setSize(sketch.size-1);return;}if(e.key===']'){setSize(sketch.size+1);return;}
+  if(e.key==='+'||e.key==='='){sketch.setZoom(sketch.zoom*1.25);return;}if(e.key==='-'){sketch.setZoom(sketch.zoom*.8);return;}if(e.key==='1'){sketch.setZoom(1);return;}});
+document.addEventListener('keyup',e=>{if(e.key===' '&&sketch){sketch.spaceHeld=false;sketch.canvas.dataset.tool=sketch.tool;}});
+window.addEventListener('blur',()=>{if(sketch){sketch.spaceHeld=false;sketch.canvas.dataset.tool=sketch.tool;}});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){if(dirty&&sketch&&seat){fetch(`/api/rooms/${seat.code}/save`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${seat.token}`},body:JSON.stringify({round:state.round,drawing:sketch.snapshot()}),keepalive:true}).catch(()=>{});}}else{poll();flush();}});
 window.addEventListener('online',()=>{poll();flush();});
 window.addEventListener('resize',()=>sketch?.transform());

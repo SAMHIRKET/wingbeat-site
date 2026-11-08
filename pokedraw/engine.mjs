@@ -40,7 +40,9 @@ export class Game {
     if (!d || !Array.isArray(d.ops) || d.ops.length > 1800) fail('Drawing is too complex. Please use fewer strokes.');
     let points = 0;
     for (const op of d.ops) {
-      if (!['pen','eraser','line','rect','ellipse','fill'].includes(op.tool) || !/^#[0-9a-f]{6}$/i.test(op.color) || !Number.isFinite(op.size) || op.size < 1 || op.size > 80 || !Number.isFinite(op.alpha) || op.alpha < .05 || op.alpha > 1 || !Array.isArray(op.points) || !op.points.length) fail('Invalid drawing.');
+      if (!['pen','eraser','line','rect','ellipse','fill','move'].includes(op.tool) || !/^#[0-9a-f]{6}$/i.test(op.color) || !Number.isFinite(op.size) || op.size < 1 || op.size > 80 || !Number.isFinite(op.alpha) || op.alpha < .05 || op.alpha > 1 || !Array.isArray(op.points) || !op.points.length) fail('Invalid drawing.');
+      if (op.tip!==undefined && !['round','square'].includes(op.tip) || op.pp!==undefined && typeof op.pp!=='boolean' || op.filled!==undefined && typeof op.filled!=='boolean' || op.erase!==undefined && typeof op.erase!=='boolean') fail('Invalid drawing.');
+      if (op.tool==='move' && (!Array.isArray(op.offset) || op.offset.length!==2 || !op.offset.every(n=>Number.isFinite(n)&&Math.abs(n)<=800) || op.points.length<3)) fail('Invalid drawing.');
       points += op.points.length;
       for (const point of op.points) if(!Array.isArray(point) || point.length!==3 || !point.every(Number.isFinite) || point[0]<0 || point[0]>800 || point[1]<0 || point[1]>600 || point[2]<0 || point[2]>1) fail('Invalid drawing coordinates.');
     }
