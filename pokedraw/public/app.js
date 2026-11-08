@@ -216,7 +216,8 @@ async function cardImage(card,round){const art=await getArt(card),d=document.cre
 async function saveCanvas(canvas,name,share=false){const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw new Error('Could not export this image.');const file=new File([blob],name,{type:'image/png'});
   if(share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:'Pokedraw'});return;}catch(e){if(e.name==='AbortError')return;}}
   const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
-async function saveSheet(){const selected=rounds().flatMap(r=>r.cards.map(c=>({c,r})));if(!selected.length)return;
+// Save all = every finished round so far, on the results screen as well as the gallery.
+async function saveSheet(){const all=state.history?.length?state.history:rounds(),selected=all.flatMap(r=>r.cards.map(c=>({c,r})));if(!selected.length)return;
   const cols=Math.min(4,selected.length),tw=CARD_W+MARGIN*2,th=CARD_H+MARGIN*2,sheet=document.createElement('canvas');sheet.width=cols*tw;sheet.height=Math.ceil(selected.length/cols)*th;
   if(sheet.height>8400){notice('Too many cards for one sheet. Save rounds one at a time.');return;}
   const ctx=sheet.getContext('2d');ctx.fillStyle='#e4f7ff';ctx.fillRect(0,0,sheet.width,sheet.height);
