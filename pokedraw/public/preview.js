@@ -1,7 +1,8 @@
 // Preview mode: fake room service so every screen can be looked at without a server.
 // Off unless the page has ?preview=<stage> or sets window.PD_PREVIEW before loading.
 // Stages: home lobby drawing reveal voting results gallery
-const q=new URL(location.href).searchParams.get('preview'),stage=q||window.PD_PREVIEW;
+const q=new URL(location.href).searchParams.get('preview'),h=location.hash.slice(1),useHash=!q&&!!window.PD_PREVIEW,stage=q||(useHash&&h)||window.PD_PREVIEW;
+const go=s=>{if(useHash){location.hash=s;location.reload();}else location.search='?preview='+s;};
 if(stage){
   const STAGES=['home','lobby','drawing','reveal','voting','results','gallery'];
   const now=()=>Date.now(),me='p1',code='KR4BZ';
@@ -45,9 +46,9 @@ if(stage){
     const path=url.pathname.replace('/api/rooms','').split('/').filter(Boolean),method=init.method||'GET';
     await new Promise(r=>setTimeout(r,60));
     if(!path.length&&method==='GET')return json(stage==='home'?[{code:'H0SS2',title:"herew's room",stage:'lobby',count:3,capacity:8},{code:'JAGG1',title:'raptor pack',stage:'drawing',count:8,capacity:8}]:[]);
-    if(!path.length&&method==='POST'){location.search='?preview=lobby';return json({code,token:'preview'});}
+    if(!path.length&&method==='POST'){go('lobby');return json({code,token:'preview'});}
     const action=path.slice(1).join('/');
-    if(path[1]==='join'){location.search='?preview=lobby';return json({code,token:'preview'});}
+    if(path[1]==='join'){go('lobby');return json({code,token:'preview'});}
     if(method==='GET'&&!action){state.serverNow=now();if(state.deadline&&state.deadline<now()+1000)state.deadline=now()+(stage==='drawing'?78000:20000);return json(state);}
     if(action==='hints')return json([{id:'base1-58',name:'Pikachu',image:'https://assets.tcgdex.net/en/base/base1/58/high.webp',source:'TCGdex'},{id:'base4-87',name:'Pikachu',image:'https://assets.tcgdex.net/en/base/base4/87/high.webp',source:'TCGdex'}]);
     if(action.startsWith('draft'))return json({ops:[],revision:0});
@@ -56,9 +57,9 @@ if(stage){
       if(action==='ready'){const p=state.players[0];p.ready=!p.ready;}
       if(action==='vote'){state.voted=JSON.parse(init.body||'{}').card;}
       if(action==='submit'){state.submitted=true;}
-      if(action==='leave'||action==='delete'){location.search='?preview=home';}
-      if(action==='start'){location.search='?preview=drawing';}
-      if(action==='gallery'){location.search='?preview=gallery';}
+      if(action==='leave'||action==='delete'){go('home');}
+      if(action==='start'){go('drawing');}
+      if(action==='gallery'){go('gallery');}
       return json(state);
     }
     return json({error:'Not found'},404);
@@ -68,8 +69,9 @@ if(stage){
   // Stage switcher (preview only).
   addEventListener('DOMContentLoaded',()=>{
     const bar=document.createElement('nav');bar.className='preview-bar';bar.setAttribute('aria-label','preview screens');
-    bar.innerHTML=STAGES.map(s=>`<a href="?preview=${s}" ${s===stage?'aria-current="page"':''}>${s}</a>`).join('')+'<a href="#" id="pv-how">how</a>';
+    bar.innerHTML=STAGES.map(s=>`<a href="${useHash?'#'+s:'?preview='+s}" data-stage="${s}" ${s===stage?'aria-current="page"':''}>${s}</a>`).join('')+'<a href="#" id="pv-how">how</a>';
     document.body.prepend(bar);
+    if(useHash)bar.querySelectorAll('[data-stage]').forEach(a=>a.onclick=e=>{e.preventDefault();go(a.dataset.stage);});
     bar.querySelector('#pv-how').onclick=e=>{e.preventDefault();document.querySelector('[data-action="help"]')?.click()||document.getElementById('tutorial').showModal();};
     const st=document.createElement('style');st.textContent='.preview-bar{position:relative;z-index:5;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding:8px;background:#050505}.preview-bar a{color:#c6ff3a;font:bold 12px monospace;padding:4px 8px;text-decoration:none;border:1px dotted #c6ff3a}.preview-bar a[aria-current]{background:#c6ff3a;color:#050505}';document.head.append(st);
   });
