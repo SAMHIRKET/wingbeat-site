@@ -280,3 +280,12 @@ dialog::backdrop{background:radial-gradient(circle,#1833a055 1.6px,transparent 2
 .tool-group .tool{width:52px;height:44px;flex:none}
 .tool-group.history{flex-basis:100%;padding-top:10px;border-top:2px dotted var(--ink)}
 @media(max-width:860px){.tool-group .tool{width:44px;height:42px}.tool-group.history{flex-basis:auto;padding-top:0;border-top:0;margin-left:auto}}
+
+/* generation tickboxes */
+.gens{display:grid;grid-template-columns:repeat(9,1fr);gap:4px;margin:0;padding:6px 0 0;border:0}
+.gens legend{padding:0 0 4px;font-size:.8rem;color:var(--ink)}
+.gen{position:relative;display:block}
+.gen input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.gen span{display:grid;place-items:center;min-height:32px;border:2px solid var(--ink);background:#fff;font:bold .85rem monospace;color:var(--ink)}
+.gen input:checked+span{background:var(--magenta);color:#fff;box-shadow:2px 2px 0 var(--ink)}
+.gen input:focus-visible+span{outline:3px solid var(--cyan);outline-offset:1px}

@@ -56,6 +56,7 @@ function home(){
           <label>${COPY.rounds}<select name="rounds"><option>3</option><option selected>5</option><option>8</option><option>10</option></select></label>
           <label>${COPY.seats}<select name="capacity"><option>4</option><option selected>8</option><option>12</option></select></label>
         </div>
+        <fieldset class="gens"><legend>${COPY.gens}</legend>${[1,2,3,4,5,6,7,8,9].map(g=>`<label class="gen"><input type="checkbox" name="gens" value="${g}" ${(storage.get('pd-gens')||[1]).includes(g)?'checked':''}><span>${COPY.gen(g)}</span></label>`).join('')}</fieldset>
         <label class="check"><input type="checkbox" name="public">${COPY.listPublic}</label>
         ${pill(COPY.make,'type="submit" class="wide"')}
       </form>`,{cls:'host-win',key:'host'})}
@@ -67,7 +68,7 @@ function home(){
     </div>
     ${win(COPY.publicBar,`<div id="public-list" class="public-list"><p class="empty">${COPY.finding}</p></div>`,{cls:'rooms-win',key:'rooms',field:'calm',right:btn(COPY.refresh,'data-action="refresh-public"','small')})}
   </div>`;
-  $('#host-form').addEventListener('submit',async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));data.public=!!data.public;await enter('create',data,e.submitter);});
+  $('#host-form').addEventListener('submit',async e=>{e.preventDefault();const form=new FormData(e.target),data=Object.fromEntries(form);data.public=!!data.public;data.gens=form.getAll('gens').map(Number);if(!data.gens.length){notice(COPY.pickGen);return;}storage.set('pd-gens',data.gens);await enter('create',data,e.submitter);});
   $('#join-form').addEventListener('submit',async e=>{e.preventDefault();await enter('join',Object.fromEntries(new FormData(e.target)),e.submitter);});
   loadPublic();
 }
@@ -85,7 +86,7 @@ const isHost=()=>state?.host===state?.me;
 function playerList(){return state.players.map((p,i)=>`<li class="${p.ready?'is-ready':''}"><span class="avatar" style="--hue:${(i*67)%360}">${esc(p.name.slice(0,1).toUpperCase())}</span><span class="player-name">${esc(p.name)}<small>${p.id===state.me?COPY.you+' ':''}${p.id===state.host?COPY.host:p.online?'':COPY.away}</small></span><span class="player-status">${p.ready?COPY.isReady:COPY.waiting}</span>${isHost()&&p.id!==state.me?`<button class="wb-btn small kick" data-kick="${p.id}" aria-label="remove ${esc(p.name)}">x</button>`:''}</li>`).join('');}
 function lobby(){const me=state.players.find(p=>p.id===state.me);
   main.innerHTML=roomShell(`<div class="lobby">
-    ${win(COPY.lobbyBar,`<div class="lobby-tags"><span class="tag">${COPY.secondsTag(state.seconds)}</span><span class="tag">${COPY.roundsTag(state.rounds)}</span><span class="tag">${COPY.seatsTag(state.players.length,state.capacity)}</span><span class="tag">${state.public?COPY.public:COPY.private}</span></div>
+    ${win(COPY.lobbyBar,`<div class="lobby-tags"><span class="tag">${COPY.secondsTag(state.seconds)}</span><span class="tag">${COPY.roundsTag(state.rounds)}</span><span class="tag">${COPY.gensTag(state.gens||[1])}</span><span class="tag">${COPY.seatsTag(state.players.length,state.capacity)}</span><span class="tag">${state.public?COPY.public:COPY.private}</span></div>
       <ul class="players">${playerList()}</ul>
       <div class="lobby-actions">${pill(me.ready?COPY.unready:COPY.ready,`data-action="ready" aria-pressed="${me.ready}"`,me.ready?'lime':'')}${isHost()?pill(COPY.start,`data-action="start" ${state.players.every(p=>p.ready)?'':'disabled'}`,'blue'):''}</div>
       ${state.players.length<3?`<p class="note">${COPY.fewPlayers}</p>`:''}`,{cls:'lobby-win',key:'lobby:'+state.code})}

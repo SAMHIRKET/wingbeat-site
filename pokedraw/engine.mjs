@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, randomInt } from 'node:crypto';
-import { pokemon } from './pokemon.mjs';
+import { pokemon, pool } from './pokemon.mjs';
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const id = (n = 18) => randomBytes(n).toString('hex');
@@ -8,6 +8,8 @@ const cleanName = value => String(value || '').trim().replace(/[\u0000-\u001f\u0
 const clamp = (n, a, b, fallback) => Number.isFinite(+n) ? Math.max(a, Math.min(b, Math.floor(+n))) : fallback;
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
+// Generations ticked at room creation: integers 1-9, default gen 1 only.
+function cleanGens(v){const list=(Array.isArray(v)?v:[v]).map(Number).filter(n=>Number.isInteger(n)&&n>=1&&n<=9);return list.length?[...new Set(list)].sort((a,b)=>a-b):[1];}
 export class Game {
   constructor(path = ':memory:', now = () => Date.now(), ttl = 24 * 3600_000) {
     this.db = new DatabaseSync(path); this.now = now; this.ttl = ttl;
@@ -24,7 +26,7 @@ export class Game {
   create(data = {}) {
     if (this.db.prepare('SELECT count(*) n FROM rooms').get().n >= 200) fail('The room service is full. Please try again later.', 503);
     let code; do { code = Array.from({length: 5}, () => ALPHABET[randomInt(ALPHABET.length)]).join(''); } while (this.db.prepare('SELECT code FROM rooms WHERE code=?').get(code));
-    const p = this.player(data.name); const r = {code, title: cleanName(data.title || `${p.name}'s room`), public: !!data.public, host: p.id, players:[p], banned:[], stage:'lobby', round:0, rounds:clamp(data.rounds,1,10,5), seconds:clamp(data.seconds,30,300,90), capacity:clamp(data.capacity,2,12,8), tutorial: true, deadline:null, selected:[], history:[], touched:this.now()};
+    const p = this.player(data.name); const r = {code, title: cleanName(data.title || `${p.name}'s room`), public: !!data.public, host: p.id, players:[p], banned:[], stage:'lobby', round:0, rounds:clamp(data.rounds,1,10,5), seconds:clamp(data.seconds,30,300,90), capacity:clamp(data.capacity,2,12,8), gens:cleanGens(data.gens), tutorial: true, deadline:null, selected:[], history:[], touched:this.now()};
     this.save(r); return {code, token:p.token};
   }
   player(name) { return {id:id(8), token:id(24), name:cleanName(name), ready:false, active:true, score:0, lastSeen:this.now(), eligible:0, submitted:false}; }
@@ -51,7 +53,7 @@ export class Game {
   }
   start(r) {
     r.round++; r.stage='drawing'; r.deadline=this.now()+r.seconds*1000;
-    const available=pokemon.filter(n=>!r.selected.includes(n)); r.prompt=available[randomInt(available.length)]; r.selected.push(r.prompt);
+    let available=pool(r.gens||[1]).filter(n=>!r.selected.includes(n)); if(!available.length)available=pool(r.gens||[1]); r.prompt=available[randomInt(available.length)]; r.selected.push(r.prompt);
     r.players.forEach(p=>{p.submitted=false; p.ready=false; if(p.active)p.eligible=r.round;});
   }
   reveal(r) {
@@ -80,7 +82,7 @@ export class Game {
   state(code, token) {
     const r=this.get(code),p=this.auth(r,token);p.lastSeen=this.now();this.advance(r);this.save(r,false);
     const cardData=(c, revealNames) => ({round:c.round,prompt:c.prompt,winners:c.winners||[],cards:c.cards.map((a,i)=>({id:a.id,label:`Card ${i+1}`,mine:a.player===p.id,artist:revealNames?r.players.find(x=>x.id===a.player)?.name:null,votes:revealNames?a.votes:null,download:`/api/rooms/${r.code}/cards/${c.round}/${a.id}`}))});
-    return {code:r.code,title:r.title,public:r.public,stage:r.stage,round:r.round,rounds:r.rounds,seconds:r.seconds,capacity:r.capacity,prompt:r.prompt,deadline:r.deadline,serverNow:this.now(),expiresAt:r.touched+this.ttl,host:r.host,me:p.id,eligible:p.eligible===r.round,submitted:p.submitted,players:r.players.filter(x=>x.active).map(({id,name,ready,score,submitted,lastSeen})=>({id,name,ready,score,submitted,online:this.now()-lastSeen<15000})),current:r.current&&r.stage!=='drawing'?cardData(r.current,r.stage==='results'||r.stage==='gallery'):null,history:r.history.map(c=>cardData(c,true)),voted:r.current?.votes[p.id]||null,voteEligible:r.current?.voters.includes(p.id)||false};
+    return {code:r.code,title:r.title,public:r.public,stage:r.stage,round:r.round,rounds:r.rounds,gens:r.gens||[1],seconds:r.seconds,capacity:r.capacity,prompt:r.prompt,deadline:r.deadline,serverNow:this.now(),expiresAt:r.touched+this.ttl,host:r.host,me:p.id,eligible:p.eligible===r.round,submitted:p.submitted,players:r.players.filter(x=>x.active).map(({id,name,ready,score,submitted,lastSeen})=>({id,name,ready,score,submitted,online:this.now()-lastSeen<15000})),current:r.current&&r.stage!=='drawing'?cardData(r.current,r.stage==='results'||r.stage==='gallery'):null,history:r.history.map(c=>cardData(c,true)),voted:r.current?.votes[p.id]||null,voteEligible:r.current?.voters.includes(p.id)||false};
   }
   publicRooms() { return this.db.prepare('SELECT data FROM rooms WHERE touched>? ORDER BY touched DESC LIMIT 100').all(this.now()-this.ttl).map(x=>JSON.parse(x.data)).filter(r=>r.public && r.stage!=='gallery' && r.players.some(p=>p.active && this.now()-p.lastSeen<30000)).map(r=>({code:r.code,title:r.title,stage:r.stage,count:r.players.filter(p=>p.active).length,capacity:r.capacity})); }
   act(code, token, action, data = {}) {
